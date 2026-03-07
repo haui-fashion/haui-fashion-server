@@ -1,0 +1,53 @@
+services:
+    nest-app:
+        container_name: ${SERVER_NAME}-${DOCKER_IMAGE}-${DOCKER_TAG}
+        build:
+            context: .
+            dockerfile: Dockerfile.local
+        restart: unless-stopped
+        command: 'pnpm run start:debug'
+        ports:
+            - ${APP_CONTAINER_PORT}:${APP_CONTAINER_PORT}
+            - ${DEBUG_PORT}:9229
+        env_file:
+            - ./.env
+        volumes:
+            - ./src:/src
+            - ./package.json:/package.json
+            - ./pnpm-lock.yaml:/pnpm-lock.yaml
+            - ./tsconfig.json:/tsconfig.json
+            - ./nest-cli.json:/nest-cli.json
+        depends_on:
+            postgres:
+                condition: service_healthy
+        networks:
+            - nest-network
+
+    postgres:
+        image: postgres:16-alpine
+        container_name: nest-postgres-local
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: nest_db
+        ports:
+            - '5432:5432'
+        volumes:
+            - postgres-local-data:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U postgres']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        networks:
+            - nest-network
+
+networks:
+    nest-network:
+        name: ${NETWORK_NAME}
+        driver: bridge
+
+volumes:
+    node_modules: {}
+    postgres-local-data: {}

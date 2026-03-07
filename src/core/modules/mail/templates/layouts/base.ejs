@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= locals.subject %></title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f6f9fc;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: #f6f9fc;
+            padding: 40px 0;
+        }
+        .main {
+            background-color: #ffffff;
+            margin: 0 auto;
+            width: 100%;
+            max-width: 600px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        .header {
+            background-color: #1a1a1a;
+            padding: 32px 40px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 1px;
+        }
+        .content {
+            padding: 40px;
+            color: #333333;
+            line-height: 1.6;
+        }
+        .footer {
+            text-align: center;
+            padding: 32px 40px;
+            color: #888888;
+            font-size: 14px;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #0070f3;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 600;
+            margin: 24px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <table class="main" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+                <td class="header">
+                    <h1>E-Commerce Store</h1>
+                </td>
+            </tr>
+            <tr>
+                <td class="content">
+                    <%- body %>
+                </td>
+            </tr>
+            <tr>
+                <td class="footer">
+                    <p>&copy; <%= new Date().getFullYear() %> E-Commerce Store. All rights reserved.</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

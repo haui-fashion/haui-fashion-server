@@ -1,0 +1,44 @@
+# ===========================================
+# Docker Ignore
+# ===========================================
+
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build output (will be built in container)
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs
+
+# Test
+coverage
+.nyc_output
+
+# Misc
+.DS_Store
+Thumbs.db
+*.md
+!README.md
+
+# Docker files (no need to copy these)
+Dockerfile*
+docker-compose*
+.dockerignore
