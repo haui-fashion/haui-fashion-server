@@ -9,7 +9,7 @@ on:
       - main
 
 env:
-  DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/nest-app
+  DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.DOCKER_IMAGE_NAME }}
   REGISTRY: docker.io
 
 jobs:
@@ -89,20 +89,14 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy to Render
+    name: Deployment Summary
     runs-on: ubuntu-latest
     needs: docker
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main')
 
     steps:
-      - name: Deploy to Render
-        run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
-        env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-
       - name: Deployment Summary
         run: |
-          echo "🚀 Deployment triggered!"
+          echo "🚀 Docker image successfully pushed to Docker Hub!"
           echo "📦 Docker Image: ${{ env.DOCKER_IMAGE }}:latest"
-          echo "🔗 Render will pull the new image automatically"
+          echo "⏳ Watchtower on your server will automatically pull the new image and update the container."
