@@ -1,45 +1,26 @@
 services:
     app:
         image: ${DOCKER_IMAGE:-nest-app}:${DOCKER_TAG:-latest}
-        container_name: nest-app
+        container_name: ${SERVER_NAME}-${DOCKER_IMAGE}-${DOCKER_TAG}
         restart: unless-stopped
+        env_file:
+            - ./.env
         ports:
             - '${PORT:-3000}:3000'
         environment:
             - NODE_ENV=production
             - PORT=3000
             - DATABASE_URL=${DATABASE_URL}
+            - REDIS_HOST=${REDIS_HOST}
+            - REDIS_PORT=${REDIS_PORT}
+            - REDIS_PASSWORD=${REDIS_PASSWORD}
+            - REDIS_DB=${REDIS_DB:-0}
             - JWT_SECRET=${JWT_SECRET}
             - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-86400}
         networks:
-            - nest-network
-        depends_on:
-            postgres:
-                condition: service_healthy
-
-    postgres:
-        image: postgres:16-alpine
-        container_name: nest-postgres
-        restart: unless-stopped
-        environment:
-            POSTGRES_USER: ${POSTGRES_USER:-postgres}
-            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-            POSTGRES_DB: ${POSTGRES_DB:-nest_db}
-        ports:
-            - '5432:5432'
-        volumes:
-            - postgres-data:/var/lib/postgresql/data
-        healthcheck:
-            test: ['CMD-SHELL', 'pg_isready -U postgres']
-            interval: 10s
-            timeout: 5s
-            retries: 5
-        networks:
-            - nest-network
+            - ${NETWORK_NAME:-haui-network}
 
 networks:
-    nest-network:
-        driver: bridge
-
-volumes:
-    postgres-data:
+    haui-network:
+        name: ${NETWORK_NAME:-haui-network}
+        external: true
