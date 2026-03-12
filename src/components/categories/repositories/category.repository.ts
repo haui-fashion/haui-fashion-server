@@ -1,6 +1,7 @@
 import { CategoryDatasource } from '@components/categories/datasources/category.datasource';
 import { QueryCategoryDto } from '@components/categories/dtos/query-category.dto';
 import { CategoryEntity } from '@components/categories/entities/category.entity';
+import { PaginatedData } from '@core/utilities/interceptors';
 import { BaseRepository } from '@core/utilities/repositories';
 import { Injectable } from '@nestjs/common';
 import { Category, Prisma } from '@prisma/client';
@@ -14,9 +15,7 @@ export class CategoryRepository extends BaseRepository<
     super(CategoryEntity);
   }
 
-  async findAll(
-    query: QueryCategoryDto
-  ): Promise<{ data: Category[]; total: number }> {
+  async findAll(query: QueryCategoryDto): Promise<PaginatedData<Category>> {
     const { pagination, sort, filter, search } = query;
     const page = pagination?.page ?? 1;
     const limit = pagination?.limit ?? 10;
@@ -66,7 +65,15 @@ export class CategoryRepository extends BaseRepository<
 
     const [data, total] = await Promise.all([dataPromise, countPromise]);
 
-    return { data, total };
+    return {
+      items: data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
   }
 
   async findBySlug(slug: string): Promise<Category | null> {

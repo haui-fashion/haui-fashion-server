@@ -72,7 +72,7 @@ export class AppExceptionFilter implements ExceptionFilter {
     if (exception instanceof Error) {
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Internal server error',
+        message: 'Lỗi máy chủ nội bộ',
         error: 'Internal Server Error',
         timestamp,
         path,
@@ -92,7 +92,7 @@ export class AppExceptionFilter implements ExceptionFilter {
     // Handle unknown exceptions
     return {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'An unexpected error occurred',
+      message: 'Đã xảy ra lỗi không mong muốn',
       error: 'Internal Server Error',
       timestamp,
       path,
@@ -121,11 +121,13 @@ export class AppExceptionFilter implements ExceptionFilter {
       let details: string[] | undefined;
 
       if (Array.isArray(rawMessage)) {
-        message = (rawMessage[0] as string) || 'Validation failed';
+        message = (rawMessage[0] as string) || 'Xác thực không thành công';
         details = rawMessage as string[];
       } else {
         message =
-          typeof rawMessage === 'string' ? rawMessage : 'An error occurred';
+          typeof rawMessage === 'string'
+            ? rawMessage
+            : 'Đã xảy ra lỗi không mong muốn';
       }
 
       return {

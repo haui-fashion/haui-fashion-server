@@ -28,7 +28,7 @@ export class RolesGuard implements CanActivate {
       .getRequest<{ user: { role: Role } }>();
 
     if (!user || !requiredRoles.includes(user.role)) {
-      throw new ForbiddenException('Insufficient permissions');
+      throw new ForbiddenException('Không đủ quyền truy cập');
     }
 
     return true;

@@ -20,7 +20,7 @@ export class CategoryService {
   async findById(id: string): Promise<Category> {
     const category = await this.categoryRepository.findById(id);
     if (!category) {
-      throw new NotFoundException(`Category with id ${id} not found`);
+      throw new NotFoundException(`Không tìm thấy danh mục với id ${id}`);
     }
     return category;
   }
@@ -28,7 +28,7 @@ export class CategoryService {
   async findBySlug(slug: string): Promise<Category> {
     const category = await this.categoryRepository.findBySlug(slug);
     if (!category) {
-      throw new NotFoundException(`Category with slug "${slug}" not found`);
+      throw new NotFoundException(`Không tìm thấy danh mục với slug "${slug}"`);
     }
     return category;
   }
@@ -47,9 +47,7 @@ export class CategoryService {
 
     const existing = await this.categoryRepository.findBySlug(slug);
     if (existing) {
-      throw new ConflictException(
-        `Category with slug "${slug}" already exists`
-      );
+      throw new ConflictException(`Danh mục với slug "${slug}" đã tồn tại`);
     }
 
     if (dto.parentId) {
@@ -84,14 +82,14 @@ export class CategoryService {
       );
       if (existing && existing.id !== id) {
         throw new ConflictException(
-          `Category with slug "${updateData.slug}" already exists`
+          `Danh mục với slug "${updateData.slug}" đã tồn tại`
         );
       }
     }
 
     if (dto.parentId) {
       if (dto.parentId === id) {
-        throw new ConflictException('A category cannot be its own parent');
+        throw new ConflictException('Danh mục không thể làm cha của chính nó');
       }
       await this.findById(dto.parentId);
       updateData.parent = { connect: { id: dto.parentId } };

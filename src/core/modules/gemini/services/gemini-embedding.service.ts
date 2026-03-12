@@ -18,7 +18,7 @@ export class GeminiEmbeddingService {
 
     const embedding = response.embeddings?.[0]?.values;
     if (!embedding) {
-      throw new Error('Failed to generate embedding');
+      throw new Error('Tạo embedding thất bại');
     }
 
     this.logger.debug(
@@ -36,7 +36,7 @@ export class GeminiEmbeddingService {
 
     const embeddings = response.embeddings?.map((e) => e.values ?? []);
     if (!embeddings || embeddings.length === 0) {
-      throw new Error('Failed to generate batch embeddings');
+      throw new Error('Tạo embedding hàng loạt thất bại');
     }
 
     this.logger.debug(

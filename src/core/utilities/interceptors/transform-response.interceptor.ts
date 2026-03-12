@@ -20,12 +20,16 @@ export interface ApiResponse<T = unknown> {
   data: T;
 }
 
-export interface PaginatedData<T> {
-  items: T[];
+export interface PaginatedMetaData {
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface PaginatedData<T> {
+  items: T[];
+  meta: PaginatedMetaData;
 }
 
 export type ApiPaginatedResponse<T> = ApiResponse<PaginatedData<T>>;
@@ -36,7 +40,7 @@ export type ApiPaginatedResponse<T> = ApiResponse<PaginatedData<T>>;
 
 export class ResponseBuilder<T = unknown> {
   private _statusCode: number = StatusCodes.OK;
-  private _message: string = 'Success';
+  private _message: string = 'Thành công';
   private _data: T | null = null;
 
   static create<T = unknown>(): ResponseBuilder<T> {
@@ -67,7 +71,7 @@ export class ResponseBuilder<T = unknown> {
   }
 
   // Convenience static methods
-  static success<T>(data: T, message = 'Success'): ApiResponse<T> {
+  static success<T>(data: T, message = 'Thành công'): ApiResponse<T> {
     return {
       statusCode: StatusCodes.OK,
       message,
@@ -75,7 +79,7 @@ export class ResponseBuilder<T = unknown> {
     };
   }
 
-  static created<T>(data: T, message = 'Created successfully'): ApiResponse<T> {
+  static created<T>(data: T, message = 'Tạo mới thành công'): ApiResponse<T> {
     return {
       statusCode: StatusCodes.CREATED,
       message,
@@ -88,17 +92,19 @@ export class ResponseBuilder<T = unknown> {
     total: number,
     page: number,
     limit: number,
-    message = 'Success'
+    message = 'Thành công'
   ): ApiPaginatedResponse<T> {
     return {
       statusCode: StatusCodes.OK,
       message,
       data: {
         items,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit)
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
       }
     };
   }
@@ -199,12 +205,12 @@ export class TransformResponseInterceptor<T>
 
   private getDefaultMessage(statusCode: number): string {
     const messages: Record<number, string> = {
-      [StatusCodes.OK]: 'Success',
-      [StatusCodes.CREATED]: 'Created successfully',
-      [StatusCodes.ACCEPTED]: 'Accepted',
-      [StatusCodes.NO_CONTENT]: 'No content'
+      [StatusCodes.OK]: 'Thành công',
+      [StatusCodes.CREATED]: 'Tạo mới thành công',
+      [StatusCodes.ACCEPTED]: 'Chấp nhận',
+      [StatusCodes.NO_CONTENT]: 'Không có dữ liệu'
     };
 
-    return messages[statusCode] ?? 'Success';
+    return messages[statusCode] ?? 'Thành công';
   }
 }

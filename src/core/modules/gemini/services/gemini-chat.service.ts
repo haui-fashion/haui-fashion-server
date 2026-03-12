@@ -28,7 +28,7 @@ export class GeminiChatService {
 
     const text = response.text;
     if (!text) {
-      throw new Error('Gemini returned no text response');
+      throw new Error('Gemini không trả về phản hồi văn bản');
     }
 
     this.logger.debug(`Generated content: ${text.substring(0, 100)}...`);
@@ -61,7 +61,7 @@ export class GeminiChatService {
 
     const text = response.text;
     if (!text) {
-      throw new Error('Gemini returned no text response');
+      throw new Error('Gemini không trả về phản hồi văn bản');
     }
 
     this.logger.debug(`Chat response: ${text.substring(0, 100)}...`);

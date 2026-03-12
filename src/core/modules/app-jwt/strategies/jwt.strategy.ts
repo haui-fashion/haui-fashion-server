@@ -20,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   ) {
     const secret = configService.get<string>('jwt.secret');
     if (!secret) {
-      throw new Error('JWT secret is not configured');
+      throw new Error('Chưa cấu hình JWT secret');
     }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -34,7 +34,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       const user = await this.userService.findById(payload.sub);
 
       if (!user || !user.isActive) {
-        throw new UnauthorizedException('User account is disabled or missing');
+        throw new UnauthorizedException(
+          'Tài khoản người dùng bị vô hiệu hoặc không tồn tại'
+        );
       }
 
       return {
@@ -43,7 +45,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: user.role
       };
     } catch {
-      throw new UnauthorizedException('Unauthorized access');
+      throw new UnauthorizedException('Không được phép truy cập');
     }
   }
 }

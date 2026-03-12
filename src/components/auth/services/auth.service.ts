@@ -20,12 +20,12 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<TokenPair> {
     const existingUser = await this.userService.findByEmailOrNull(dto.email);
     if (existingUser) {
-      throw new ConflictException('Email already exists');
+      throw new ConflictException('Email đã tồn tại');
     }
 
     const user = await this.userService.create({
-      username: dto.email.split('@')[0], // Extract default username from email
-      fullname: dto.name, // RegisterDto uses `name`
+      username: dto.email.split('@')[0],
+      fullname: dto.name,
       email: dto.email,
       password: dto.password
     });
@@ -40,7 +40,7 @@ export class AuthService {
   async login(dto: LoginDto): Promise<TokenPair> {
     const user = await this.userService.findByEmailOrNull(dto.email);
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Thông tin đăng nhập không hợp lệ');
     }
 
     const isPasswordValid = await UserService.isPasswordMatch(
@@ -48,7 +48,7 @@ export class AuthService {
       user.password
     );
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Thông tin đăng nhập không hợp lệ');
     }
 
     return this.appJwtService.generateTokenPair({
@@ -64,14 +64,14 @@ export class AuthService {
 
       const user = await this.userService.findById(payload.sub);
       if (!user) {
-        throw new UnauthorizedException('User not found');
+        throw new UnauthorizedException('Không tìm thấy người dùng');
       }
 
       return this.appJwtService.generateTokenPair({
         sub: user.id
       });
     } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException('Refresh token không hợp lệ');
     }
   }
 

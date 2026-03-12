@@ -19,10 +19,10 @@ export class AddressService {
   async findById(id: string, userId: string): Promise<Address> {
     const address = await this.addressRepository.findById(id);
     if (!address) {
-      throw new NotFoundException(`Address with id ${id} not found`);
+      throw new NotFoundException(`Không tìm thấy địa chỉ với id ${id}`);
     }
     if (address.userId !== userId) {
-      throw new ForbiddenException('You do not own this address');
+      throw new ForbiddenException('Bạn không sở hữu địa chỉ này');
     }
     return address;
   }

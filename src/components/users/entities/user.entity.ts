@@ -1,7 +1,8 @@
+import { AddressEntity } from '@components/addresses/entities/address.entity';
 import { BaseEntity } from '@core/utilities/entities';
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { Exclude, Expose } from 'class-transformer';
+import { Exclude, Expose, Type } from 'class-transformer';
 
 export class UserEntity extends BaseEntity {
   @Expose()
@@ -30,4 +31,9 @@ export class UserEntity extends BaseEntity {
   @Expose()
   @ApiProperty()
   isActive: boolean;
+
+  @Expose()
+  @ApiProperty()
+  @Type(() => AddressEntity)
+  addresses?: AddressEntity[];
 }

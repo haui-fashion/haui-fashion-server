@@ -1,3 +1,4 @@
+import { LABEL_METADATA_KEY } from '@core/utilities/decorators/label.decorator';
 import {
   ArgumentMetadata,
   BadRequestException,
@@ -62,6 +63,74 @@ export interface ValidationPipeOptions {
 @Injectable()
 export class ValidationPipe implements PipeTransform {
   private readonly options: ValidationPipeOptions;
+  private readonly constraintMessages: Record<
+    string,
+    (args: { field: string; constraintText?: string }) => string
+  > = {
+    isString: ({ field }) => `${field} phải là chuỗi`,
+    isNotEmpty: ({ field }) => `${field} không được để trống`,
+    isEmail: ({ field }) => `${field} phải là email hợp lệ`,
+    isEnum: ({ field, constraintText }) => {
+      const allowed = constraintText?.split(':')?.[1]?.trim();
+      return allowed
+        ? `${field} phải thuộc một trong các giá trị: ${allowed}`
+        : `${field} không hợp lệ`;
+    },
+    minLength: ({ field, constraintText }) => {
+      const match = constraintText?.match(/\d+/)?.[0];
+      return match
+        ? `${field} phải có tối thiểu ${match} ký tự`
+        : `${field} không đủ độ dài tối thiểu`;
+    },
+    maxLength: ({ field, constraintText }) => {
+      const match = constraintText?.match(/\d+/)?.[0];
+      return match
+        ? `${field} phải có tối đa ${match} ký tự`
+        : `${field} vượt quá độ dài cho phép`;
+    },
+    length: ({ field, constraintText }) => {
+      const nums = constraintText?.match(/\d+/g);
+      if (nums && nums.length >= 2) {
+        return `${field} phải có độ dài từ ${nums[0]} đến ${nums[1]} ký tự`;
+      }
+      return `${field} không đúng độ dài yêu cầu`;
+    },
+    isBoolean: ({ field }) => `${field} phải là giá trị boolean`,
+    isNumber: ({ field }) => `${field} phải là số`,
+    isInt: ({ field }) => `${field} phải là số nguyên`,
+    isPositive: ({ field }) => `${field} phải là số dương`,
+    isNegative: ({ field }) => `${field} phải là số âm`,
+    min: ({ field, constraintText }) => {
+      const match = constraintText?.match(/\d+/)?.[0];
+      return match
+        ? `${field} phải lớn hơn hoặc bằng ${match}`
+        : `${field} nhỏ hơn giá trị cho phép`;
+    },
+    max: ({ field, constraintText }) => {
+      const match = constraintText?.match(/\d+/)?.[0];
+      return match
+        ? `${field} phải nhỏ hơn hoặc bằng ${match}`
+        : `${field} vượt quá giá trị cho phép`;
+    },
+    isDateString: ({ field }) => `${field} phải là ngày hợp lệ`,
+    isUUID: ({ field }) => `${field} phải là UUID hợp lệ`,
+    isPhoneNumber: ({ field }) => `${field} phải là số điện thoại hợp lệ`,
+    isUrl: ({ field }) => `${field} phải là URL hợp lệ`,
+    isArray: ({ field }) => `${field} phải là mảng`,
+    arrayMinSize: ({ field, constraintText }) => {
+      const match = constraintText?.match(/\d+/)?.[0];
+      return match
+        ? `${field} phải có ít nhất ${match} phần tử`
+        : `${field} không đủ số lượng phần tử`;
+    },
+    arrayMaxSize: ({ field, constraintText }) => {
+      const match = constraintText?.match(/\d+/)?.[0];
+      return match
+        ? `${field} chỉ được có tối đa ${match} phần tử`
+        : `${field} vượt quá số lượng phần tử cho phép`;
+    },
+    matches: ({ field }) => `${field} không đúng định dạng yêu cầu`
+  };
 
   constructor(options: ValidationPipeOptions = {}) {
     this.options = {
@@ -109,7 +178,7 @@ export class ValidationPipe implements PipeTransform {
     if (errors.length > 0) {
       throw new BadRequestException({
         message: this.formatErrors(errors),
-        error: 'Validation Error'
+        error: 'Lỗi xác thực dữ liệu'
       });
     }
 
@@ -131,31 +200,61 @@ export class ValidationPipe implements PipeTransform {
     return errors.flatMap((error) => this.extractMessages(error));
   }
 
-  private extractMessages(error: ValidationError, parentPath = ''): string[] {
+  private extractMessages(
+    error: ValidationError,
+    parentPath = '',
+    targetPrototype?: object
+  ): string[] {
     const propertyPath = parentPath
       ? `${parentPath}.${error.property}`
       : error.property;
 
+    const currentTarget = error.target
+      ? Object.getPrototypeOf(error.target)
+      : targetPrototype;
+    const label = this.getLabel(currentTarget, error.property);
+    const fieldName = label ?? propertyPath;
+
     const messages: string[] = [];
 
-    // Get constraint messages for this error
     if (error.constraints) {
       messages.push(
-        ...Object.values(error.constraints).map(
-          (msg) => `${propertyPath}: ${msg}`
+        ...Object.entries(error.constraints).map(([key, constraintText]) =>
+          this.formatConstraintMessage(key, fieldName, constraintText)
         )
       );
     }
 
-    // Recursively get messages from child errors
     if (error.children && error.children.length > 0) {
       messages.push(
         ...error.children.flatMap((child) =>
-          this.extractMessages(child, propertyPath)
+          this.extractMessages(child, propertyPath, currentTarget)
         )
       );
     }
 
     return messages;
+  }
+
+  private formatConstraintMessage(
+    constraintKey: string,
+    field: string,
+    constraintText?: string
+  ): string {
+    const formatter = this.constraintMessages[constraintKey];
+    if (formatter) {
+      return formatter({ field, constraintText });
+    }
+    return `${field}: ${constraintText ?? 'không hợp lệ'}`;
+  }
+
+  private getLabel(
+    target: object | undefined,
+    propertyKey: string
+  ): string | undefined {
+    if (!target) return undefined;
+    return Reflect.getMetadata(LABEL_METADATA_KEY, target, propertyKey) as
+      | string
+      | undefined;
   }
 }

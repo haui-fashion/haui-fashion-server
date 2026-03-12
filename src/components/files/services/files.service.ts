@@ -34,7 +34,8 @@ export class FilesService {
           },
           (error: UploadApiErrorResponse, result: UploadApiResponse) => {
             if (error) return reject(new Error(error.message));
-            if (!result) return reject(new Error('Cloudinary upload failed'));
+            if (!result)
+              return reject(new Error('Tải lên Cloudinary thất bại'));
             resolve(result);
           }
         );

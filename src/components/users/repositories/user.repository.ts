@@ -1,6 +1,7 @@
 import { UserDatasource } from '@components/users/datasources/user.datasource';
 import { QueryUserDto } from '@components/users/dtos/query-user.dto';
 import { UserEntity } from '@components/users/entities/user.entity';
+import { PaginatedData } from '@core/utilities/interceptors';
 import { BaseRepository } from '@core/utilities/repositories';
 import { Injectable } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
@@ -11,7 +12,7 @@ export class UserRepository extends BaseRepository<UserEntity, User> {
     super(UserEntity);
   }
 
-  async findAll(query: QueryUserDto): Promise<{ data: User[]; total: number }> {
+  async findAll(query: QueryUserDto): Promise<PaginatedData<User>> {
     const { pagination, sort, filter, search } = query;
     const page = pagination?.page ?? 1;
     const limit = pagination?.limit ?? 10;
@@ -61,7 +62,15 @@ export class UserRepository extends BaseRepository<UserEntity, User> {
 
     const [data, total] = await Promise.all([dataPromise, countPromise]);
 
-    return { data, total };
+    return {
+      items: data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -71,7 +80,11 @@ export class UserRepository extends BaseRepository<UserEntity, User> {
   }
 
   async findById(id: string): Promise<User | null> {
-    return this.datasource.findById(id);
+    return this.datasource.findById(id, {
+      include: {
+        addresses: true
+      }
+    });
   }
 
   async createUser(data: Prisma.UserCreateInput): Promise<User> {

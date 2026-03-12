@@ -32,7 +32,7 @@ export class LoggingInterceptor implements NestInterceptor {
           const duration = Date.now() - startTime;
           const { statusCode } = response;
 
-          this.logger.info('HTTP Request', {
+          this.logger.info('Yêu cầu HTTP', {
             context: 'HTTP',
             method,
             url: originalUrl,
@@ -47,7 +47,7 @@ export class LoggingInterceptor implements NestInterceptor {
           const statusCode =
             error instanceof HttpException ? error.getStatus() : 500;
 
-          this.logger.error('HTTP Request Error', {
+          this.logger.error('Lỗi yêu cầu HTTP', {
             context: 'HTTP',
             method,
             url: originalUrl,

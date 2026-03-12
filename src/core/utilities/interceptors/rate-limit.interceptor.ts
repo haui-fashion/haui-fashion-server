@@ -190,8 +190,9 @@ export class RateLimitInterceptor implements NestInterceptor {
         {
           statusCode: StatusCodes.TOO_MANY_REQUESTS,
           message:
-            customMessage ?? 'Too many requests. Please try again later.',
-          error: 'Too Many Requests',
+            customMessage ??
+            'Quá nhiều yêu cầu. Vui lòng thử lại sau vài giây.',
+          error: 'Quá nhiều yêu cầu',
           retryAfter
         },
         StatusCodes.TOO_MANY_REQUESTS

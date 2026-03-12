@@ -22,7 +22,9 @@ export class UserService {
   async findByEmail(email: string): Promise<User> {
     const user = await this.userRepository.findByEmail(email);
     if (!user) {
-      throw new NotFoundException(`User with email ${email} not found`);
+      throw new NotFoundException(
+        `Không tìm thấy người dùng với email ${email}`
+      );
     }
     return user;
   }
@@ -30,7 +32,7 @@ export class UserService {
   async findById(id: string): Promise<User> {
     const user = await this.userRepository.findById(id);
     if (!user) {
-      throw new NotFoundException(`User with id ${id} not found`);
+      throw new NotFoundException(`Không tìm thấy người dùng với id ${id}`);
     }
     return user;
   }
@@ -44,7 +46,7 @@ export class UserService {
   }
 
   async update(id: string, data: UpdateUserDto): Promise<User> {
-    await this.findById(id); // Ensure exists
+    await this.findById(id);
     if (data.password) {
       data.password = await bcrypt.hash(data.password, 10);
     }

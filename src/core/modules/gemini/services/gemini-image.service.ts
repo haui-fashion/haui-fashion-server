@@ -92,7 +92,7 @@ export class GeminiImageService {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const parts = response?.candidates?.[0]?.content?.parts;
     if (!parts || !Array.isArray(parts) || parts.length === 0) {
-      throw new Error('Gemini returned no image response');
+      throw new Error('Gemini không trả về phản hồi hình ảnh');
     }
 
     for (const part of parts as Array<{
@@ -108,7 +108,7 @@ export class GeminiImageService {
     }
 
     if (!result.base64) {
-      throw new Error('Gemini returned no image data');
+      throw new Error('Gemini không có dữ liệu hình ảnh');
     }
 
     this.logger.debug(

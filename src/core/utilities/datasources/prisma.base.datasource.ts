@@ -8,29 +8,58 @@ export abstract class PrismaDatasource<
   UpdateInput,
   WhereInput,
   WhereUniqueInput,
-  OrderByInput
+  OrderByInput,
+  IncludeInput = any,
+  SelectInput = any,
+  DistinctInput = any,
+  CursorInput = any
 > {
   protected constructor(
     protected readonly prisma: PrismaService,
     private readonly modelDelegate: {
-      create: (args: { data: CreateInput }) => Promise<T>;
+      create: (args: {
+        data: CreateInput;
+        include?: IncludeInput;
+        select?: SelectInput;
+      }) => Promise<T>;
       findMany: (args?: {
         where?: WhereInput;
         skip?: number;
         take?: number;
         orderBy?: OrderByInput;
+        include?: IncludeInput;
+        select?: SelectInput;
+        distinct?: DistinctInput;
+        cursor?: CursorInput;
       }) => Promise<T[]>;
-      findFirst: (args?: { where?: WhereInput }) => Promise<T | null>;
-      findUnique: (args: { where: WhereUniqueInput }) => Promise<T | null>;
+      findFirst: (args?: {
+        where?: WhereInput;
+        include?: IncludeInput;
+        select?: SelectInput;
+        distinct?: DistinctInput;
+        cursor?: CursorInput;
+        orderBy?: OrderByInput;
+      }) => Promise<T | null>;
+      findUnique: (args: {
+        where: WhereUniqueInput;
+        include?: IncludeInput;
+        select?: SelectInput;
+      }) => Promise<T | null>;
       update: (args: {
         where: WhereUniqueInput;
         data: UpdateInput;
+        include?: IncludeInput;
+        select?: SelectInput;
       }) => Promise<T>;
       updateMany: (args: {
         where: WhereInput;
         data: UpdateInput;
       }) => Promise<{ count: number }>;
-      delete: (args: { where: WhereUniqueInput }) => Promise<T>;
+      delete: (args: {
+        where: WhereUniqueInput;
+        include?: IncludeInput;
+        select?: SelectInput;
+      }) => Promise<T>;
       deleteMany: (args: { where: WhereInput }) => Promise<{ count: number }>;
       count: (args?: { where?: WhereInput }) => Promise<number>;
     },
@@ -42,8 +71,18 @@ export abstract class PrismaDatasource<
     return { ...where, deletedAt: null } as WhereInput;
   }
 
-  async create(data: CreateInput): Promise<T> {
-    return this.modelDelegate.create({ data });
+  async create(
+    data: CreateInput,
+    options?: {
+      include?: IncludeInput;
+      select?: SelectInput;
+    }
+  ): Promise<T> {
+    return this.modelDelegate.create({
+      data,
+      include: options?.include,
+      select: options?.select
+    });
   }
 
   async findAllByCondition(
@@ -52,45 +91,95 @@ export abstract class PrismaDatasource<
       skip?: number;
       take?: number;
       orderBy?: OrderByInput;
+      include?: IncludeInput;
+      select?: SelectInput;
+      distinct?: DistinctInput;
+      cursor?: CursorInput;
     }
   ): Promise<T[]> {
     return this.modelDelegate.findMany({
       where: this.applySoftDeleteFilter(where),
       skip: options?.skip,
       take: options?.take,
+      orderBy: options?.orderBy,
+      include: options?.include,
+      select: options?.select,
+      distinct: options?.distinct,
+      cursor: options?.cursor
+    });
+  }
+
+  async findOneByCondition(
+    where: WhereInput,
+    options?: {
+      include?: IncludeInput;
+      select?: SelectInput;
+      distinct?: DistinctInput;
+      cursor?: CursorInput;
+      orderBy?: OrderByInput;
+    }
+  ): Promise<T | null> {
+    return this.modelDelegate.findFirst({
+      where: this.applySoftDeleteFilter(where),
+      include: options?.include,
+      select: options?.select,
+      distinct: options?.distinct,
+      cursor: options?.cursor,
       orderBy: options?.orderBy
     });
   }
 
-  async findOneByCondition(where: WhereInput): Promise<T | null> {
-    return this.modelDelegate.findFirst({
-      where: this.applySoftDeleteFilter(where)
-    });
-  }
-
-  async findById(id: string): Promise<T | null> {
+  async findById(
+    id: string,
+    options?: {
+      include?: IncludeInput;
+      select?: SelectInput;
+    }
+  ): Promise<T | null> {
     if (this.softDelete) {
       return this.modelDelegate.findFirst({
-        where: { id, deletedAt: null } as unknown as WhereInput
+        where: { id, deletedAt: null } as unknown as WhereInput,
+        include: options?.include,
+        select: options?.select
       });
     }
     return this.modelDelegate.findUnique({
-      where: { id } as WhereUniqueInput
+      where: { id } as WhereUniqueInput,
+      include: options?.include,
+      select: options?.select
     });
   }
 
-  async updateById(id: string, data: UpdateInput): Promise<T> {
+  async updateById(
+    id: string,
+    data: UpdateInput,
+    options?: {
+      include?: IncludeInput;
+      select?: SelectInput;
+    }
+  ): Promise<T> {
     return this.modelDelegate.update({
       where: { id } as WhereUniqueInput,
-      data
+      data,
+      include: options?.include,
+      select: options?.select
     });
   }
 
   async updateOneByCondition(
     where: WhereUniqueInput,
-    data: UpdateInput
+    data: UpdateInput,
+    options?: {
+      include?: IncludeInput;
+      select?: SelectInput;
+    }
   ): Promise<T> {
-    return this.modelDelegate.update({ where, data });
+    return this.modelDelegate.update({
+      where,
+      data,
+      include: options?.include,
+      select: options?.select
+    });
   }
 
   async updateManyByCondition(
@@ -100,14 +189,32 @@ export abstract class PrismaDatasource<
     return this.modelDelegate.updateMany({ where, data });
   }
 
-  async deleteById(id: string): Promise<T> {
+  async deleteById(
+    id: string,
+    options?: {
+      include?: IncludeInput;
+      select?: SelectInput;
+    }
+  ): Promise<T> {
     return this.modelDelegate.delete({
-      where: { id } as WhereUniqueInput
+      where: { id } as WhereUniqueInput,
+      include: options?.include,
+      select: options?.select
     });
   }
 
-  async deleteOneByCondition(where: WhereUniqueInput): Promise<T> {
-    return this.modelDelegate.delete({ where });
+  async deleteOneByCondition(
+    where: WhereUniqueInput,
+    options?: {
+      include?: IncludeInput;
+      select?: SelectInput;
+    }
+  ): Promise<T> {
+    return this.modelDelegate.delete({
+      where,
+      include: options?.include,
+      select: options?.select
+    });
   }
 
   async deleteManyByCondition(where: WhereInput): Promise<{ count: number }> {
