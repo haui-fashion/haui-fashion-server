@@ -7,7 +7,7 @@ import {
   Type
 } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
-import { validate, ValidationError } from 'class-validator';
+import { ValidationError, validate } from 'class-validator';
 
 // ============================================================================
 // Validation Options
@@ -209,9 +209,9 @@ export class ValidationPipe implements PipeTransform {
       ? `${parentPath}.${error.property}`
       : error.property;
 
-    const currentTarget = error.target
-      ? Object.getPrototypeOf(error.target)
-      : targetPrototype;
+    const currentTarget = (
+      error.target ? Object.getPrototypeOf(error.target) : targetPrototype
+    ) as object | undefined;
     const label = this.getLabel(currentTarget, error.property);
     const fieldName = label ?? propertyPath;
 
