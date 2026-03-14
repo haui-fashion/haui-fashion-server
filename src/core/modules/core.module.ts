@@ -76,7 +76,10 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     },
     {
       provide: APP_PIPE,
-      useValue: new ValidationPipe()
+      useValue: new ValidationPipe({
+        transform: true,
+        whitelist: true
+      })
     }
   ],
   exports: [AppConfigModule, AppBullModule, LoggerModule]

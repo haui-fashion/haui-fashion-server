@@ -2,7 +2,10 @@ import { CategoryDatasource } from '@components/categories/datasources/category.
 import { QueryCategoryDto } from '@components/categories/dtos/query-category.dto';
 import { CategoryEntity } from '@components/categories/entities/category.entity';
 import { PaginatedData } from '@core/utilities/interceptors';
-import { BaseRepository } from '@core/utilities/repositories';
+import {
+  BaseRepository,
+  buildPrismaWhereFromFilters
+} from '@core/utilities/repositories';
 import { Injectable } from '@nestjs/common';
 import { Category, Prisma } from '@prisma/client';
 
@@ -32,12 +35,14 @@ export class CategoryRepository extends BaseRepository<
     }
 
     if (filter && filter.length > 0) {
-      filter.forEach((f) => {
-        (where as Record<string, any>)[f.column] = {
-          contains: f.value,
-          mode: 'insensitive'
-        };
-      });
+      const filterWhere = buildPrismaWhereFromFilters(filter);
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+      const nextAnd = Array.isArray(filterWhere.AND) ? filterWhere.AND : [];
+      where.AND = [...existingAnd, ...nextAnd] as Prisma.CategoryWhereInput[];
     }
 
     const orderBy: Prisma.CategoryOrderByWithRelationInput[] = [];

@@ -12,6 +12,15 @@ enum Role {
   ADMIN
 }
 
+model EntitySequence {
+  key          String   @id
+  currentValue Int      @default(0) @map("current_value")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("entity_sequences")
+}
+
 model User {
   id        String    @id @default(uuid())
   code      String?   @unique

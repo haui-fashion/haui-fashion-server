@@ -1,6 +1,7 @@
 import { Label } from '@core/utilities/decorators/label.decorator';
-import { Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsEnum,
   IsInt,
   IsOptional,
@@ -9,6 +10,18 @@ import {
   Min,
   ValidateNested
 } from 'class-validator';
+
+function parseQueryValue<T>(value: unknown): T {
+  if (value == null) {
+    return value as T;
+  }
+
+  if (typeof value === 'string') {
+    return JSON.parse(value) as T;
+  }
+
+  return value as T;
+}
 
 export class PaginationDto {
   @Label('Trang')
@@ -32,14 +45,45 @@ export enum SortParam {
   DESC = 'desc'
 }
 
+export enum FilterOperator {
+  EQ = 'eq',
+  CONTAINS = 'contains',
+  GT = 'gt',
+  LT = 'lt',
+  IN = 'in',
+  BETWEEN = 'between'
+}
+
+export enum FilterValueType {
+  BOOLEAN = 'boolean',
+  NUMBER = 'number',
+  STRING = 'string',
+  DATE = 'date'
+}
+
 export class FilterDto {
   @Label('Cột lọc')
   @IsString()
   column: string;
 
+  @Label('Toán tử lọc')
+  @IsOptional()
+  @IsEnum(FilterOperator)
+  operator?: FilterOperator = FilterOperator.EQ;
+
+  @Label('Kiểu dữ liệu lọc')
+  @IsOptional()
+  @IsEnum(FilterValueType)
+  type?: FilterValueType = FilterValueType.STRING;
+
   @Label('Giá trị lọc')
-  @IsString()
-  value: string;
+  @IsOptional()
+  value?: unknown;
+
+  @Label('Danh sách giá trị lọc')
+  @IsOptional()
+  @IsArray()
+  values?: unknown[];
 }
 
 export class SortDto {
@@ -57,18 +101,39 @@ export class BaseQueryDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => PaginationDto)
+  @Transform(({ value }) => {
+    const parsed = parseQueryValue<PaginationDto | undefined>(value);
+    return parsed ? plainToInstance(PaginationDto, parsed) : undefined;
+  })
   pagination?: PaginationDto;
 
   @Label('Sắp xếp')
   @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SortDto)
+  @Transform(({ value }) => {
+    const parsed = parseQueryValue<SortDto[] | undefined>(value);
+    if (!Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    return parsed.map((e) => plainToInstance(SortDto, e));
+  })
   sort?: SortDto[];
 
   @Label('Bộ lọc')
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => FilterDto)
+  @Transform(({ value }) => {
+    const parsed = parseQueryValue<FilterDto[] | undefined>(value);
+    if (!Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    return parsed.map((e) => plainToInstance(FilterDto, e));
+  })
   filter?: FilterDto[];
 
   @Label('Tìm kiếm')

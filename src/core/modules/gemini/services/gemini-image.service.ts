@@ -89,7 +89,6 @@ export class GeminiImageService {
       mimeType: 'image/png'
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const parts = response?.candidates?.[0]?.content?.parts;
     if (!parts || !Array.isArray(parts) || parts.length === 0) {
       throw new Error('Gemini không trả về phản hồi hình ảnh');

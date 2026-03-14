@@ -1,14 +1,29 @@
 import { UserDatasource } from '@components/users/datasources/user.datasource';
 import { QueryUserDto } from '@components/users/dtos/query-user.dto';
 import { UserEntity } from '@components/users/entities/user.entity';
+import { EntityCodeOptions, EntityCodeService } from '@core/modules/prisma';
 import { PaginatedData } from '@core/utilities/interceptors';
-import { BaseRepository } from '@core/utilities/repositories';
-import { Injectable } from '@nestjs/common';
+import {
+  BaseRepository,
+  buildPrismaWhereFromFilters
+} from '@core/utilities/repositories';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
+
+const USER_CODE_OPTIONS: EntityCodeOptions = {
+  sequenceKey: 'USER',
+  prefix: 'USER',
+  length: 7
+};
+
+const MAX_CODE_GENERATION_RETRIES = 5;
 
 @Injectable()
 export class UserRepository extends BaseRepository<UserEntity, User> {
-  constructor(private readonly datasource: UserDatasource) {
+  constructor(
+    private readonly datasource: UserDatasource,
+    private readonly entityCodeService: EntityCodeService
+  ) {
     super(UserEntity);
   }
 
@@ -29,12 +44,14 @@ export class UserRepository extends BaseRepository<UserEntity, User> {
     }
 
     if (filter && filter.length > 0) {
-      filter.forEach((f) => {
-        (where as Record<string, any>)[f.column] = {
-          contains: f.value,
-          mode: 'insensitive'
-        };
-      });
+      const filterWhere = buildPrismaWhereFromFilters(filter);
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+      const nextAnd = Array.isArray(filterWhere.AND) ? filterWhere.AND : [];
+      where.AND = [...existingAnd, ...nextAnd] as Prisma.UserWhereInput[];
     }
 
     const orderBy: Prisma.UserOrderByWithRelationInput[] = [];
@@ -88,10 +105,44 @@ export class UserRepository extends BaseRepository<UserEntity, User> {
   }
 
   async createUser(data: Prisma.UserCreateInput): Promise<User> {
-    return this.datasource.create(data);
+    for (let attempt = 0; attempt < MAX_CODE_GENERATION_RETRIES; attempt++) {
+      const nextCode = await this.entityCodeService.nextCode(USER_CODE_OPTIONS);
+
+      try {
+        return await this.datasource.create({
+          ...data,
+          code: nextCode
+        });
+      } catch (error) {
+        if (!this.isCodeConflictError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    throw new ConflictException(
+      'Không thể tạo mã người dùng tự động. Vui lòng thử lại.'
+    );
   }
 
   async updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User> {
     return this.datasource.updateById(id, data);
+  }
+
+  private isCodeConflictError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2002') {
+      return false;
+    }
+
+    const target = error.meta?.target;
+    if (Array.isArray(target)) {
+      return target.includes('code');
+    }
+
+    return typeof target === 'string' ? target.includes('code') : false;
   }
 }
