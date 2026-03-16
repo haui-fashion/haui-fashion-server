@@ -58,7 +58,6 @@ export class CategoryService {
       name: dto.name,
       slug,
       description: dto.description,
-      imageUrl: dto.imageUrl,
       isActive: dto.isActive ?? true,
       position: dto.position ?? 0,
       ...(dto.parentId && {

@@ -11,10 +11,6 @@ export class UserEntity extends BaseEntity {
 
   @Expose()
   @ApiProperty()
-  name?: string;
-
-  @Expose()
-  @ApiProperty()
   fullname: string;
 
   @Expose()

@@ -24,11 +24,6 @@ export class CreateUserDto {
   @IsString()
   fullname: string;
 
-  @Label('Tên hiển thị')
-  @IsOptional()
-  @IsString()
-  name?: string;
-
   @Label('Email')
   @IsNotEmpty()
   @IsEmail()

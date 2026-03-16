@@ -25,11 +25,6 @@ export class CreateCategoryDto {
   @IsString()
   description?: string;
 
-  @Label('Ảnh')
-  @IsOptional()
-  @IsString()
-  imageUrl?: string;
-
   @Label('Kích hoạt')
   @IsOptional()
   @IsBoolean()

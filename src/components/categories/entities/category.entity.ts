@@ -16,10 +16,6 @@ export class CategoryEntity extends BaseEntity {
   description?: string;
 
   @Expose()
-  @ApiProperty({ required: false })
-  imageUrl?: string;
-
-  @Expose()
   @ApiProperty()
   isActive: boolean;
 
