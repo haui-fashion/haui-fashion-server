@@ -40,7 +40,7 @@ export class AddressService {
     }
 
     return this.addressRepository.createAddress({
-      fullName: dto.fullName,
+      fullname: dto.fullname,
       phone: dto.phone,
       provinceId: dto.provinceId,
       provinceName: dto.provinceName,

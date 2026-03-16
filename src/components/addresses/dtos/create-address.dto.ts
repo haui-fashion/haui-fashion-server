@@ -12,7 +12,7 @@ export class CreateAddressDto {
   @Label('Họ và tên người nhận')
   @IsNotEmpty()
   @IsString()
-  fullName: string;
+  fullname: string;
 
   @Label('Số điện thoại')
   @IsNotEmpty()
@@ -43,8 +43,9 @@ export class CreateAddressDto {
 
   @Label('Mã phường/xã')
   @IsOptional()
-  @IsString()
-  wardCode?: string;
+  @IsInt()
+  @Min(0)
+  wardCode?: number;
 
   @Label('Tên phường/xã')
   @IsNotEmpty()

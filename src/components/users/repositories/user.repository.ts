@@ -104,7 +104,7 @@ export class UserRepository extends BaseRepository<UserEntity, User> {
     });
   }
 
-  async createUser(data: Prisma.UserCreateInput): Promise<User> {
+  async createUser(data: Omit<Prisma.UserCreateInput, 'code'>): Promise<User> {
     for (let attempt = 0; attempt < MAX_CODE_GENERATION_RETRIES; attempt++) {
       const nextCode = await this.entityCodeService.nextCode(USER_CODE_OPTIONS);
 
