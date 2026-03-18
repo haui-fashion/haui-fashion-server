@@ -4,10 +4,10 @@ import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty()
-  @Label('Tên hiển thị')
+  @Label('Họ và tên')
   @IsString()
   @IsNotEmpty()
-  name: string;
+  fullname: string;
 
   @ApiProperty()
   @Label('Email')

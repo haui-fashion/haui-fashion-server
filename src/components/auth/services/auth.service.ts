@@ -25,7 +25,7 @@ export class AuthService {
 
     const user = await this.userService.create({
       username: dto.email.split('@')[0],
-      fullname: dto.name,
+      fullname: dto.fullname,
       email: dto.email,
       password: dto.password
     });

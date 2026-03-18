@@ -14,8 +14,15 @@ export class CategoryRepository extends BaseRepository<
   CategoryEntity,
   Category
 > {
+  private static readonly MAX_PARENT_DEPTH = 10;
+
   constructor(private readonly datasource: CategoryDatasource) {
     super(CategoryEntity);
+  }
+
+  private buildParentInclude(depth: number): Record<string, any> | boolean {
+    if (depth <= 0) return true;
+    return { include: { parent: this.buildParentInclude(depth - 1) } };
   }
 
   async findAll(query: QueryCategoryDto): Promise<PaginatedData<Category>> {
@@ -64,7 +71,10 @@ export class CategoryRepository extends BaseRepository<
     const dataPromise = this.datasource.findAllByCondition(where, {
       skip,
       take: limit,
-      orderBy: finalOrderBy
+      orderBy: finalOrderBy,
+      include: {
+        parent: this.buildParentInclude(CategoryRepository.MAX_PARENT_DEPTH)
+      }
     });
     const countPromise = this.datasource.count(where);
 
@@ -88,7 +98,11 @@ export class CategoryRepository extends BaseRepository<
   }
 
   async findById(id: string): Promise<Category | null> {
-    return this.datasource.findById(id);
+    return this.datasource.findById(id, {
+      include: {
+        parent: this.buildParentInclude(CategoryRepository.MAX_PARENT_DEPTH)
+      }
+    });
   }
 
   async findRootCategories(): Promise<Category[]> {

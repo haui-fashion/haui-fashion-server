@@ -7,6 +7,7 @@ import { FileRepository } from '../repositories/file.repository';
 
 export interface FileUploadResult {
   id: string;
+  filename: string;
   url: string;
   publicId: string;
   size: number;
@@ -55,6 +56,7 @@ export class FilesService {
 
     return {
       id: savedFile.id,
+      filename: savedFile.filename,
       url: savedFile.url,
       publicId: savedFile.publicId,
       size: savedFile.size,

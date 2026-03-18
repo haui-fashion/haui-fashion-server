@@ -139,13 +139,14 @@ model Product {
   slug String @unique
   name String
 
-  description String?
-  brand       String?
-  gender      Gender?
-  styleTags   Json?   @map("style_tags")
-  material    String?
-  season      String?
-  fit         String?
+  description     Json?
+  descriptionHtml String? @map("description_html") @db.Text
+  brand           String?
+  gender          Gender?
+  styleTags       Json?   @map("style_tags")
+  material        String?
+  season          String?
+  fit             String?
 
   isActive Boolean @default(true) @map("is_active")
 

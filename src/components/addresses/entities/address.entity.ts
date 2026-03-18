@@ -29,7 +29,7 @@ export class AddressEntity extends BaseEntity {
 
   @Expose()
   @ApiProperty({ required: false })
-  wardCode?: string;
+  wardCode?: number;
 
   @Expose()
   @ApiProperty()

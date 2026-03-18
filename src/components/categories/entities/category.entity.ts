@@ -28,6 +28,11 @@ export class CategoryEntity extends BaseEntity {
   parentId?: string;
 
   @Expose()
+  @ApiProperty({ type: () => CategoryEntity, required: false })
+  @Type(() => CategoryEntity)
+  parent?: CategoryEntity;
+
+  @Expose()
   @ApiProperty({ type: () => [CategoryEntity], required: false })
   @Type(() => CategoryEntity)
   children?: CategoryEntity[];
