@@ -4,7 +4,6 @@ import KeyvRedis from '@keyv/redis';
 import { CacheModule } from '@nestjs/cache-manager';
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Keyv } from 'keyv';
 
 @Global()
 @Module({
@@ -22,7 +21,7 @@ import { Keyv } from 'keyv';
           : `redis://${host}:${port}/${db}`;
 
         return {
-          stores: [new Keyv({ store: new KeyvRedis(redisUrl) })]
+          stores: [new KeyvRedis(redisUrl)]
         };
       },
       inject: [ConfigService]

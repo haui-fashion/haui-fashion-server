@@ -25,7 +25,7 @@ importers:
         version: 1.41.0
       '@keyv/redis':
         specifier: 5.1.5
-        version: 5.1.5(keyv@5.5.5)
+        version: 5.1.5(keyv@5.6.0)
       '@nestjs-modules/mailer':
         specifier: 2.0.2
         version: 2.0.2(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.0.1)(nodemailer@8.0.1)
@@ -34,7 +34,7 @@ importers:
         version: 11.0.4(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.0.1)(bullmq@5.66.3)
       '@nestjs/cache-manager':
         specifier: 3.1.0
-        version: 3.1.0(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.0.1)(cache-manager@7.2.7)(keyv@5.5.5)(rxjs@7.8.1)
+        version: 3.1.0(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.0.1)(cache-manager@7.2.7)(keyv@5.6.0)(rxjs@7.8.1)
       '@nestjs/common':
         specifier: 11.0.1
         version: 11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1)
@@ -98,9 +98,6 @@ importers:
       http-status-codes:
         specifier: 2.3.0
         version: 2.3.0
-      keyv:
-        specifier: 5.5.5
-        version: 5.5.5
       nest-winston:
         specifier: 1.10.2
         version: 1.10.2(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(winston@3.19.0)
@@ -4931,12 +4928,12 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@keyv/redis@5.1.5(keyv@5.5.5)':
+  '@keyv/redis@5.1.5(keyv@5.6.0)':
     dependencies:
       '@redis/client': 5.11.0
       cluster-key-slot: 1.1.2
       hookified: 1.15.1
-      keyv: 5.5.5
+      keyv: 5.6.0
     transitivePeerDependencies:
       - '@node-rs/xxhash'
 
@@ -5070,12 +5067,12 @@ snapshots:
       bullmq: 5.66.3
       tslib: 2.8.1
 
-  '@nestjs/cache-manager@3.1.0(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.0.1)(cache-manager@7.2.7)(keyv@5.5.5)(rxjs@7.8.1)':
+  '@nestjs/cache-manager@3.1.0(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.0.1)(cache-manager@7.2.7)(keyv@5.6.0)(rxjs@7.8.1)':
     dependencies:
       '@nestjs/common': 11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1)
       '@nestjs/core': 11.0.1(@nestjs/common@11.0.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/platform-express@11.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.1)
       cache-manager: 7.2.7
-      keyv: 5.5.5
+      keyv: 5.6.0
       rxjs: 7.8.1
 
   '@nestjs/cli@11.0.0(@swc/cli@0.6.0(@swc/core@1.10.7)(chokidar@4.0.3))(@swc/core@1.10.7)(@types/node@22.10.7)':
