@@ -152,6 +152,8 @@ export const SkipTransformResponse = () =>
 export class TransformResponseInterceptor<T>
   implements NestInterceptor<T, ApiResponse<T>>
 {
+  private static readonly SENSITIVE_KEYS = new Set(['password']);
+
   constructor(private readonly reflector: Reflector) {}
 
   intercept(
@@ -175,10 +177,17 @@ export class TransformResponseInterceptor<T>
     const response = context.switchToHttp().getResponse<Response>();
 
     return next.handle().pipe(
-      map((data) => {
+      map<T, ApiResponse<T>>((data) => {
         if (this.isApiResponse(data)) {
-          return data as ApiResponse<T>;
+          const sanitizedWrappedData = this.sanitizeSensitiveFields(data.data);
+
+          return {
+            ...(data as ApiResponse<unknown>),
+            data: sanitizedWrappedData
+          } as ApiResponse<T>;
         }
+
+        const sanitizedData = this.sanitizeSensitiveFields(data);
 
         const statusCode =
           options?.statusCode ?? response.statusCode ?? StatusCodes.OK;
@@ -187,10 +196,38 @@ export class TransformResponseInterceptor<T>
         return {
           statusCode,
           message,
-          data
+          data: sanitizedData as T
         };
       })
     );
+  }
+
+  private sanitizeSensitiveFields(data: unknown): unknown {
+    if (Array.isArray(data)) {
+      return data.map((item) => this.sanitizeSensitiveFields(item));
+    }
+
+    if (this.isPlainObject(data)) {
+      const objectData = data;
+      const sanitizedEntries = Object.entries(objectData)
+        .filter(
+          ([key]) => !TransformResponseInterceptor.SENSITIVE_KEYS.has(key)
+        )
+        .map(([key, value]) => [key, this.sanitizeSensitiveFields(value)]);
+
+      return Object.fromEntries(sanitizedEntries);
+    }
+
+    return data;
+  }
+
+  private isPlainObject(data: unknown): data is Record<string, unknown> {
+    if (!data || typeof data !== 'object') {
+      return false;
+    }
+
+    const prototype = Object.getPrototypeOf(data);
+    return prototype === Object.prototype || prototype === null;
   }
 
   private isApiResponse(data: unknown): data is ApiResponse {

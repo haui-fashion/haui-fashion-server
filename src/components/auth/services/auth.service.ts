@@ -1,5 +1,10 @@
 import { CartService } from '@components/carts/services/cart.service';
 import { UserService } from '@components/users/services/user.service';
+import { AppCacheService } from '@core/modules/app-cache';
+import {
+  AppCacheKeys,
+  AppCacheTtl
+} from '@core/modules/app-cache/constants/app-cache.constant';
 import {
   AppJwtService,
   TokenPair
@@ -16,7 +21,8 @@ export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly cartService: CartService,
-    private readonly appJwtService: AppJwtService
+    private readonly appJwtService: AppJwtService,
+    private readonly appCacheService: AppCacheService
   ) {}
 
   async register(dto: RegisterDto): Promise<TokenPair> {
@@ -80,6 +86,22 @@ export class AuthService {
   }
 
   async getMe(userId: string) {
-    return this.userService.findById(userId);
+    type MeUser = Awaited<ReturnType<UserService['findById']>>;
+    const cachedUser = await this.appCacheService.get<MeUser>(
+      AppCacheKeys.userInfo(userId)
+    );
+
+    if (cachedUser) {
+      return cachedUser;
+    }
+
+    const user = await this.userService.findById(userId);
+    await this.appCacheService.set(
+      AppCacheKeys.userInfo(userId),
+      user,
+      AppCacheTtl.userInfo
+    );
+
+    return user;
   }
 }
