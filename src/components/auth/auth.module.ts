@@ -1,3 +1,4 @@
+import { CartsModule } from '@components/carts/carts.module';
 import { UserModule } from '@components/users/users.module';
 import { AppJwtModule } from '@core/modules/app-jwt';
 import { Module } from '@nestjs/common';
@@ -5,7 +6,7 @@ import { AuthController } from './controllers/auth.controller';
 import { AuthService } from './services/auth.service';
 
 @Module({
-  imports: [AppJwtModule, UserModule],
+  imports: [AppJwtModule, UserModule, CartsModule],
   controllers: [AuthController],
   providers: [AuthService],
   exports: [AuthService]

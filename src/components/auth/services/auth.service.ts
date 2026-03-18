@@ -1,3 +1,4 @@
+import { CartService } from '@components/carts/services/cart.service';
 import { UserService } from '@components/users/services/user.service';
 import {
   AppJwtService,
@@ -14,6 +15,7 @@ import { LoginDto, RefreshTokenDto, RegisterDto } from '../dtos';
 export class AuthService {
   constructor(
     private readonly userService: UserService,
+    private readonly cartService: CartService,
     private readonly appJwtService: AppJwtService
   ) {}
 
@@ -29,6 +31,8 @@ export class AuthService {
       email: dto.email,
       password: dto.password
     });
+
+    await this.cartService.ensureCartByUserId(user.id);
 
     return this.appJwtService.generateTokenPair({
       sub: user.id,
