@@ -1,6 +1,6 @@
 import { FileDto } from '@common/dtos/file.dto';
+import { IsTiptapDocument } from '@core/modules/tiptap';
 import { Label } from '@core/utilities/decorators/label.decorator';
-import { IsTiptapDocument } from '@core/utilities/validators/is-tiptap-document.validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
 import { Type } from 'class-transformer';

@@ -34,6 +34,12 @@ export default () => ({
     apiSecret: process.env.CLOUDINARY_API_SECRET
   },
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY
+    apiKey: process.env.GEMINI_API_KEY,
+    models: {
+      chat: process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash',
+      image: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
+      embedding: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
+      generation: process.env.GEMINI_GENERATION_MODEL || 'gemini-2.5-flash'
+    }
   }
 });

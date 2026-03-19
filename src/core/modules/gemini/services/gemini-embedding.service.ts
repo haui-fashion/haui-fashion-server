@@ -1,13 +1,25 @@
+import {
+  GEMINI_EMBEDDING_MODEL,
+  GEMINI_MODEL_CONFIG_PATHS
+} from '@core/modules/gemini/constants/gemini.constants';
 import { GoogleGenAI } from '@google/genai';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { GEMINI_CLIENT } from '../gemini.provider';
 
 @Injectable()
 export class GeminiEmbeddingService {
   private readonly logger = new Logger(GeminiEmbeddingService.name);
-  private readonly model = 'gemini-embedding-001';
+  private readonly model: string;
 
-  constructor(@Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI) {}
+  constructor(
+    @Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI,
+    private readonly configService: ConfigService
+  ) {
+    this.model =
+      this.configService.get<string>(GEMINI_MODEL_CONFIG_PATHS.embedding) ||
+      GEMINI_EMBEDDING_MODEL;
+  }
 
   async embedText(text: string, taskType?: string): Promise<number[]> {
     const response = await this.ai.models.embedContent({

@@ -2,12 +2,16 @@ import {
   CreateProductDto,
   ProductImageInputDto
 } from '@components/products/dtos/create-product.dto';
+import { GenerateProductDescriptionDto } from '@components/products/dtos/generate-product-description.dto';
 import { QueryProductDto } from '@components/products/dtos/query-product.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
 import { ProductRepository } from '@components/products/repositories/product.repository';
+import { GeminiGenerationService } from '@core/modules/gemini';
+import { GeminiGeneratedDescription } from '@core/modules/gemini/entities/gemini-generated-description.entity';
 import { PrismaService } from '@core/modules/prisma';
-import { sanitizeTiptapDescription } from '@core/utilities/sanitizers/tiptap.sanitizer';
+import { TiptapService } from '@core/modules/tiptap';
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   Injectable,
@@ -25,7 +29,9 @@ type NormalizedImageInput = {
 export class ProductService {
   constructor(
     private readonly productRepository: ProductRepository,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly geminiGenerationService: GeminiGenerationService,
+    private readonly tiptapService: TiptapService
   ) {}
 
   async findAll(query: QueryProductDto) {
@@ -239,6 +245,41 @@ export class ProductService {
     return this.findById(id);
   }
 
+  async generateDescriptionJson(dto: GenerateProductDescriptionDto) {
+    let sections: GeminiGeneratedDescription;
+    try {
+      sections = await this.geminiGenerationService.generateProductSections({
+        name: dto.name,
+        brand: dto.brand,
+        gender: dto.gender,
+        styleTags: dto.styleTags,
+        material: dto.material,
+        season: dto.season,
+        fit: dto.fit,
+        categoryName: dto.categoryName,
+        highlights: dto.highlights,
+        images: dto.images || []
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadGatewayException(
+        'Không thể sinh mô tả sản phẩm từ Gemini. Vui lòng thử lại.'
+      );
+    }
+
+    const tiptapJson = this.buildCommonDescriptionTiptap(sections);
+    const sanitized = this.tiptapService.sanitizeDescription(tiptapJson);
+
+    return {
+      description: sanitized.json,
+      descriptionHtml: sanitized.html,
+      sections
+    };
+  }
+
   private async assertCategoryExists(categoryId?: string | null) {
     if (!categoryId) {
       return;
@@ -324,21 +365,6 @@ export class ProductService {
     return deduped;
   }
 
-  private sanitizeDescription(description?: Record<string, unknown>) {
-    if (!description) {
-      return {
-        descriptionJson: undefined,
-        descriptionHtml: undefined
-      };
-    }
-
-    const sanitized = sanitizeTiptapDescription(description);
-
-    return {
-      descriptionJson: sanitized.json as unknown as Prisma.InputJsonValue,
-      descriptionHtml: sanitized.html
-    };
-  }
   private generateSlug(name: string): string {
     return name
       .normalize('NFD')
@@ -352,6 +378,7 @@ export class ProductService {
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
   }
+
   private isUniqueConstraintError(error: unknown, field: string): boolean {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
       return false;
@@ -367,5 +394,98 @@ export class ProductService {
     }
 
     return typeof target === 'string' ? target.includes(field) : false;
+  }
+
+  private buildCommonDescriptionTiptap(
+    sections: GeminiGeneratedDescription
+  ): Record<string, unknown> {
+    const content: Array<Record<string, unknown>> = [
+      this.headingNode('Tên sản phẩm'),
+      this.paragraphNode(sections.productName),
+      this.headingNode('Mô tả ngắn (Short Preview)'),
+      this.paragraphNode(sections.shortPreview),
+      this.headingNode('Điểm nổi bật'),
+      this.listNode(sections.keyFeatures),
+      this.headingNode('Chất liệu và cấu tạo'),
+      this.listNode(sections.materialAndBuild),
+      this.headingNode('Hướng dẫn bảo quản (Preserver)'),
+      this.listNode(sections.preserver),
+      this.headingNode('Kích thước và form dáng'),
+      this.listNode(sections.sizeAndFit),
+      this.headingNode('Gợi ý phối đồ'),
+      this.listNode(sections.stylingSuggestions),
+      this.headingNode('Bộ sản phẩm gồm'),
+      this.listNode(sections.packageIncludes),
+      this.headingNode('SEO Keywords'),
+      this.listNode(sections.seoKeywords)
+    ];
+
+    return {
+      type: 'doc',
+      content
+    };
+  }
+
+  private headingNode(text: string): Record<string, unknown> {
+    return {
+      type: 'heading',
+      attrs: { level: 3 },
+      content: [
+        {
+          type: 'text',
+          text
+        }
+      ]
+    };
+  }
+
+  private paragraphNode(text: string): Record<string, unknown> {
+    return {
+      type: 'paragraph',
+      content: [
+        {
+          type: 'text',
+          text
+        }
+      ]
+    };
+  }
+
+  private listNode(items: string[]): Record<string, unknown> {
+    const normalizedItems = items.length > 0 ? items : ['Đang cập nhật'];
+
+    return {
+      type: 'bulletList',
+      content: normalizedItems.map((item) => ({
+        type: 'listItem',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: item
+              }
+            ]
+          }
+        ]
+      }))
+    };
+  }
+
+  private sanitizeDescription(description?: Record<string, unknown>) {
+    if (!description) {
+      return {
+        descriptionJson: undefined,
+        descriptionHtml: undefined
+      };
+    }
+
+    const sanitized = this.tiptapService.sanitizeDescription(description);
+
+    return {
+      descriptionJson: sanitized.json as unknown as Prisma.InputJsonValue,
+      descriptionHtml: sanitized.html
+    };
   }
 }

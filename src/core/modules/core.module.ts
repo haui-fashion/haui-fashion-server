@@ -11,6 +11,7 @@ import { HealthModule } from '@core/modules/health';
 import { LoggerModule } from '@core/modules/logger';
 import { AppMailModule } from '@core/modules/mail/mail.module';
 import { PrismaModule } from '@core/modules/prisma';
+import { TiptapModule } from '@core/modules/tiptap';
 import { AppExceptionFilter } from '@core/utilities/filters';
 import {
   LoggingInterceptor,
@@ -37,6 +38,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     AppJwtModule,
     AppMailModule,
     GeminiModule,
+    TiptapModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,

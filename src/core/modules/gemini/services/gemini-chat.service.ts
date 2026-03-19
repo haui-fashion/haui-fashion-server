@@ -1,18 +1,26 @@
+import {
+  GEMINI_CHAT_MODEL,
+  GEMINI_MODEL_CONFIG_PATHS
+} from '@core/modules/gemini/constants/gemini.constants';
+import { ChatMessage } from '@core/modules/gemini/entities/chat-message.entity';
 import { GoogleGenAI } from '@google/genai';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { GEMINI_CLIENT } from '../gemini.provider';
-
-export interface ChatMessage {
-  role: 'user' | 'model';
-  content: string;
-}
 
 @Injectable()
 export class GeminiChatService {
   private readonly logger = new Logger(GeminiChatService.name);
-  private readonly model = 'gemini-2.5-flash';
+  private readonly model: string;
 
-  constructor(@Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI) {}
+  constructor(
+    @Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI,
+    private readonly configService: ConfigService
+  ) {
+    this.model =
+      this.configService.get<string>(GEMINI_MODEL_CONFIG_PATHS.chat) ||
+      GEMINI_CHAT_MODEL;
+  }
 
   async generateContent(
     prompt: string,

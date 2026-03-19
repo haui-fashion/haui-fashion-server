@@ -1,19 +1,27 @@
+import {
+  GEMINI_DEFAULT_IMAGE_MIME_TYPE,
+  GEMINI_IMAGE_MODEL,
+  GEMINI_MODEL_CONFIG_PATHS
+} from '@core/modules/gemini/constants/gemini.constants';
+import { ImageGenerationResult } from '@core/modules/gemini/entities/image-generation-result.entity';
 import { GoogleGenAI } from '@google/genai';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { GEMINI_CLIENT } from '../gemini.provider';
-
-export interface ImageGenerationResult {
-  base64: string;
-  mimeType: string;
-  text?: string;
-}
 
 @Injectable()
 export class GeminiImageService {
   private readonly logger = new Logger(GeminiImageService.name);
-  private readonly model = 'gemini-2.5-flash-image';
+  private readonly model: string;
 
-  constructor(@Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI) {}
+  constructor(
+    @Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI,
+    private readonly configService: ConfigService
+  ) {
+    this.model =
+      this.configService.get<string>(GEMINI_MODEL_CONFIG_PATHS.image) ||
+      GEMINI_IMAGE_MODEL;
+  }
 
   async generateImage(prompt: string): Promise<ImageGenerationResult> {
     const response = await this.ai.models.generateContent({
@@ -86,7 +94,7 @@ export class GeminiImageService {
   private extractImageFromResponse(response: any): ImageGenerationResult {
     const result: ImageGenerationResult = {
       base64: '',
-      mimeType: 'image/png'
+      mimeType: GEMINI_DEFAULT_IMAGE_MIME_TYPE
     };
 
     const parts = response?.candidates?.[0]?.content?.parts;
@@ -102,7 +110,8 @@ export class GeminiImageService {
         result.text = part.text;
       } else if (part.inlineData) {
         result.base64 = part.inlineData.data;
-        result.mimeType = part.inlineData.mimeType || 'image/png';
+        result.mimeType =
+          part.inlineData.mimeType || GEMINI_DEFAULT_IMAGE_MIME_TYPE;
       }
     }
 

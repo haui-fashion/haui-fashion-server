@@ -1,4 +1,5 @@
 import { CreateProductDto } from '@components/products/dtos/create-product.dto';
+import { GenerateProductDescriptionDto } from '@components/products/dtos/generate-product-description.dto';
 import { QueryProductDto } from '@components/products/dtos/query-product.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
 import { ProductService } from '@components/products/services/product.service';
@@ -28,6 +29,17 @@ export class ProductController {
   @ApiOperation({ summary: 'Create a new product' })
   create(@Body() dto: CreateProductDto) {
     return this.productService.create(dto);
+  }
+
+  @Post('ai/generate-description')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary:
+      'Generate Tiptap product description JSON from product data and images using Gemini'
+  })
+  generateDescription(@Body() dto: GenerateProductDescriptionDto) {
+    return this.productService.generateDescriptionJson(dto);
   }
 
   @Get()

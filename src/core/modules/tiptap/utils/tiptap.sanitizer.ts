@@ -1,137 +1,16 @@
+import {
+  TIPTAP_ALLOWED_ATTRS,
+  TIPTAP_ALLOWED_MARK_TYPES,
+  TIPTAP_ALLOWED_NODE_TYPES,
+  TIPTAP_SANITIZE_HTML_OPTIONS
+} from '@core/modules/tiptap/constants/tiptap.constants';
+import {
+  TiptapDocument,
+  TiptapMark,
+  TiptapNode
+} from '@core/modules/tiptap/entities/tiptap-document.entity';
 import { BadRequestException } from '@nestjs/common';
 import sanitizeHtml from 'sanitize-html';
-
-export interface TiptapMark {
-  type: string;
-  attrs?: Record<string, unknown>;
-}
-
-export interface TiptapNode {
-  type: string;
-  attrs?: Record<string, unknown>;
-  content?: TiptapNode[];
-  marks?: TiptapMark[];
-  text?: string;
-}
-
-export interface TiptapDocument {
-  type: 'doc';
-  content?: TiptapNode[];
-}
-
-const ALLOWED_NODE_TYPES = new Set([
-  'doc',
-  'paragraph',
-  'text',
-  'heading',
-  'bulletList',
-  'orderedList',
-  'listItem',
-  'blockquote',
-  'codeBlock',
-  'hardBreak',
-  'horizontalRule',
-  'image',
-  'table',
-  'tableRow',
-  'tableHeader',
-  'tableCell'
-]);
-
-const ALLOWED_MARK_TYPES = new Set([
-  'bold',
-  'italic',
-  'underline',
-  'strike',
-  'code',
-  'link',
-  'textStyle',
-  'highlight',
-  'subscript',
-  'superscript'
-]);
-
-const ALLOWED_ATTRS: Record<string, Set<string>> = {
-  heading: new Set(['level']),
-  codeBlock: new Set(['language']),
-  orderedList: new Set(['start']),
-  image: new Set(['src', 'alt', 'title', 'width', 'height']),
-  link: new Set(['href', 'target', 'rel', 'class']),
-  textStyle: new Set(['color', 'fontSize', 'fontFamily']),
-  highlight: new Set(['color']),
-  tableCell: new Set(['colspan', 'rowspan', 'colwidth']),
-  tableHeader: new Set(['colspan', 'rowspan', 'colwidth'])
-};
-
-const SANITIZE_HTML_OPTIONS: sanitizeHtml.IOptions = {
-  allowedTags: [
-    'p',
-    'br',
-    'strong',
-    'b',
-    'em',
-    'i',
-    'u',
-    's',
-    'del',
-    'code',
-    'pre',
-    'blockquote',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'ul',
-    'ol',
-    'li',
-    'a',
-    'img',
-    'hr',
-    'sub',
-    'sup',
-    'span',
-    'table',
-    'thead',
-    'tbody',
-    'tr',
-    'th',
-    'td',
-    'mark'
-  ],
-  allowedAttributes: {
-    a: ['href', 'target', 'rel'],
-    img: ['src', 'alt', 'title', 'width', 'height'],
-    h1: ['id'],
-    h2: ['id'],
-    h3: ['id'],
-    h4: ['id'],
-    h5: ['id'],
-    h6: ['id'],
-    ol: ['start'],
-    span: ['style'],
-    mark: ['data-color', 'style'],
-    td: ['colspan', 'rowspan'],
-    th: ['colspan', 'rowspan'],
-    pre: ['class']
-  },
-  allowedStyles: {
-    span: {
-      color: [/^#[0-9a-fA-F]{3,6}$/, /^rgb\(\d{1,3},\s?\d{1,3},\s?\d{1,3}\)$/],
-      'font-size': [/^\d+(\.\d+)?(px|em|rem|%)$/],
-      'font-family': [/^[\w\s,'-]+$/]
-    },
-    mark: {
-      'background-color': [
-        /^#[0-9a-fA-F]{3,6}$/,
-        /^rgb\(\d{1,3},\s?\d{1,3},\s?\d{1,3}\)$/
-      ]
-    }
-  },
-  allowProtocolRelative: false,
-  allowedSchemes: ['http', 'https', 'mailto']
-};
 
 export function sanitizeTiptapDescription(raw: unknown): {
   json: TiptapDocument;
@@ -141,7 +20,7 @@ export function sanitizeTiptapDescription(raw: unknown): {
 
   const sanitizedDoc = sanitizeNode(raw) as TiptapDocument;
   const html = tiptapToHtml(sanitizedDoc);
-  const cleanHtml = sanitizeHtml(html, SANITIZE_HTML_OPTIONS);
+  const cleanHtml = sanitizeHtml(html, TIPTAP_SANITIZE_HTML_OPTIONS);
 
   return { json: sanitizedDoc, html: cleanHtml };
 }
@@ -171,14 +50,14 @@ function assertIsTiptapDocument(
 }
 
 function sanitizeNode(node: TiptapNode): TiptapNode {
-  if (!ALLOWED_NODE_TYPES.has(node.type)) {
+  if (!TIPTAP_ALLOWED_NODE_TYPES.has(node.type)) {
     return { type: 'paragraph' };
   }
 
   const sanitized: TiptapNode = { type: node.type };
 
   if (node.attrs && typeof node.attrs === 'object') {
-    const allowedSet = ALLOWED_ATTRS[node.type];
+    const allowedSet = TIPTAP_ALLOWED_ATTRS[node.type];
     if (allowedSet) {
       sanitized.attrs = {};
       for (const [key, val] of Object.entries(node.attrs)) {
@@ -195,7 +74,7 @@ function sanitizeNode(node: TiptapNode): TiptapNode {
 
   if (node.marks && Array.isArray(node.marks)) {
     sanitized.marks = node.marks
-      .filter((mark) => ALLOWED_MARK_TYPES.has(mark.type))
+      .filter((mark) => TIPTAP_ALLOWED_MARK_TYPES.has(mark.type))
       .map((mark) => sanitizeMark(mark));
   }
 
@@ -210,7 +89,7 @@ function sanitizeMark(mark: TiptapMark): TiptapMark {
   const sanitized: TiptapMark = { type: mark.type };
 
   if (mark.attrs && typeof mark.attrs === 'object') {
-    const allowedSet = ALLOWED_ATTRS[mark.type];
+    const allowedSet = TIPTAP_ALLOWED_ATTRS[mark.type];
     if (allowedSet) {
       sanitized.attrs = {};
       for (const [key, val] of Object.entries(mark.attrs)) {
