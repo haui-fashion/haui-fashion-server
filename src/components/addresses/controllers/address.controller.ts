@@ -1,7 +1,7 @@
 import { CreateAddressDto } from '@components/addresses/dtos/create-address.dto';
 import { UpdateAddressDto } from '@components/addresses/dtos/update-address.dto';
 import { AddressService } from '@components/addresses/services/address.service';
-import { CurrentUser } from '@core/utilities/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserDto } from '@core/utilities/decorators';
 import {
   Body,
   Controller,
@@ -12,10 +12,6 @@ import {
   Post
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-
-interface CurrentUserDto {
-  userId: string;
-}
 
 @ApiTags('Addresses')
 @ApiBearerAuth()

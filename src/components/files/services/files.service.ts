@@ -1,18 +1,10 @@
+import { FileEntity } from '@components/files/entities/file.entity';
 import { CLOUDINARY } from '@core/modules/cloudinary/cloudinary.provider';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadApiErrorResponse, UploadApiResponse, v2 } from 'cloudinary';
 import * as streamifier from 'streamifier';
 import { FileRepository } from '../repositories/file.repository';
-
-export interface FileUploadResult {
-  id: string;
-  filename: string;
-  url: string;
-  publicId: string;
-  size: number;
-  mimetype: string;
-}
 
 @Injectable()
 export class FilesService {
@@ -25,7 +17,7 @@ export class FilesService {
   async uploadFile(
     file: Express.Multer.File,
     userId?: string
-  ): Promise<FileUploadResult> {
+  ): Promise<FileEntity> {
     const uploadResult = await new Promise<UploadApiResponse>(
       (resolve, reject) => {
         const uploadStream = this.cloudinary.uploader.upload_stream(
@@ -67,7 +59,7 @@ export class FilesService {
   async uploadFiles(
     files: Express.Multer.File[],
     userId?: string
-  ): Promise<FileUploadResult[]> {
+  ): Promise<FileEntity[]> {
     const uploadResults = await Promise.all(
       files.map((file) => this.uploadFile(file, userId))
     );

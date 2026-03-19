@@ -5,6 +5,7 @@ import { CategoryModule } from '@components/categories/categories.module';
 import { FilesModule } from '@components/files/files.module';
 import { OrdersModule } from '@components/orders/orders.module';
 import { ProductsModule } from '@components/products/products.module';
+import { ReviewsModule } from '@components/reviews/reviews.module';
 import { UserModule } from '@components/users/users.module';
 import { VariantsModule } from '@components/variants/variants.module';
 import { Module } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { Module } from '@nestjs/common';
     CartsModule,
     OrdersModule,
     ProductsModule,
+    ReviewsModule,
     VariantsModule
   ],
   controllers: [],

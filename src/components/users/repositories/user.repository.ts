@@ -1,7 +1,9 @@
+import { MAX_CODE_GENERATION_RETRIES } from '@components/orders/constants/order.constant';
+import { USER_CODE_OPTIONS } from '@components/users/constants/user.constant';
 import { UserDatasource } from '@components/users/datasources/user.datasource';
 import { QueryUserDto } from '@components/users/dtos/query-user.dto';
 import { UserEntity } from '@components/users/entities/user.entity';
-import { EntityCodeOptions, EntityCodeService } from '@core/modules/prisma';
+import { EntityCodeService } from '@core/modules/prisma';
 import { PaginatedData } from '@core/utilities/interceptors';
 import {
   BaseRepository,
@@ -9,14 +11,6 @@ import {
 } from '@core/utilities/repositories';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
-
-const USER_CODE_OPTIONS: EntityCodeOptions = {
-  sequenceKey: 'USER',
-  prefix: 'USER',
-  length: 7
-};
-
-const MAX_CODE_GENERATION_RETRIES = 5;
 
 @Injectable()
 export class UserRepository extends BaseRepository<UserEntity, User> {
