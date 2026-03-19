@@ -25,13 +25,20 @@ export class CategoryRepository extends BaseRepository<
     return { include: { parent: this.buildParentInclude(depth - 1) } };
   }
 
-  async findAll(query: QueryCategoryDto): Promise<PaginatedData<Category>> {
+  async findAll(
+    query: QueryCategoryDto,
+    options?: { includeInactive?: boolean }
+  ): Promise<PaginatedData<Category>> {
     const { pagination, sort, filter, search } = query;
     const page = pagination?.page ?? 1;
     const limit = pagination?.limit ?? 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.CategoryWhereInput = {};
+
+    if (!options?.includeInactive) {
+      where.isActive = true;
+    }
 
     if (search) {
       where.OR = [
@@ -91,30 +98,54 @@ export class CategoryRepository extends BaseRepository<
     };
   }
 
-  async findBySlug(slug: string): Promise<Category | null> {
+  async findBySlug(
+    slug: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<Category | null> {
     return this.datasource.findOneByCondition({
-      slug
+      slug,
+      ...(!options?.includeInactive && { isActive: true })
     } as Prisma.CategoryWhereInput);
   }
 
-  async findById(id: string): Promise<Category | null> {
-    return this.datasource.findById(id, {
-      include: {
-        parent: this.buildParentInclude(CategoryRepository.MAX_PARENT_DEPTH)
+  async findById(
+    id: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<Category | null> {
+    return this.datasource.findOneByCondition(
+      {
+        id,
+        ...(!options?.includeInactive && { isActive: true })
+      } as Prisma.CategoryWhereInput,
+      {
+        include: {
+          parent: this.buildParentInclude(CategoryRepository.MAX_PARENT_DEPTH)
+        }
       }
-    });
+    );
   }
 
-  async findRootCategories(): Promise<Category[]> {
+  async findRootCategories(options?: {
+    includeInactive?: boolean;
+  }): Promise<Category[]> {
     return this.datasource.findAllByCondition(
-      { parentId: null } as Prisma.CategoryWhereInput,
+      {
+        parentId: null,
+        ...(!options?.includeInactive && { isActive: true })
+      } as Prisma.CategoryWhereInput,
       { orderBy: { position: 'asc' } }
     );
   }
 
-  async findChildrenByParentId(parentId: string): Promise<Category[]> {
+  async findChildrenByParentId(
+    parentId: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<Category[]> {
     return this.datasource.findAllByCondition(
-      { parentId } as Prisma.CategoryWhereInput,
+      {
+        parentId,
+        ...(!options?.includeInactive && { isActive: true })
+      } as Prisma.CategoryWhereInput,
       { orderBy: { position: 'asc' } }
     );
   }

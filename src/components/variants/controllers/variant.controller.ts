@@ -2,7 +2,7 @@ import { CreateVariantDto } from '@components/variants/dtos/create-variant.dto';
 import { QueryVariantDto } from '@components/variants/dtos/query-variant.dto';
 import { UpdateVariantDto } from '@components/variants/dtos/update-variant.dto';
 import { VariantService } from '@components/variants/services/variant.service';
-import { Public } from '@core/utilities/decorators/public.decorator';
+import { Public } from '@core/utilities/decorators';
 import { Roles } from '@core/utilities/decorators/roles.decorator';
 import {
   Body,
@@ -33,15 +33,31 @@ export class VariantController {
   @Get()
   @Public()
   @ApiOperation({
-    summary: 'Get all variants with pagination, sorting, and filtering'
+    summary: 'Public list variants (active products only)'
   })
   async findAll(@Query() query: QueryVariantDto) {
     return this.variantService.findAll(query);
   }
 
+  @Get('admin')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin list variants (active/inactive/all)' })
+  async findAllForAdmin(@Query() query: QueryVariantDto) {
+    return this.variantService.findAll(query, Role.ADMIN);
+  }
+
+  @Get('admin/:id')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin get variant by ID' })
+  async findOneForAdmin(@Param('id') id: string) {
+    return this.variantService.findById(id, Role.ADMIN);
+  }
+
   @Get(':id')
   @Public()
-  @ApiOperation({ summary: 'Get a variant by ID' })
+  @ApiOperation({ summary: 'Public get variant by ID (active product only)' })
   async findOne(@Param('id') id: string) {
     return this.variantService.findById(id);
   }

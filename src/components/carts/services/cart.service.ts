@@ -56,6 +56,10 @@ export class CartService {
       );
     }
 
+    if (!variant.product.isActive) {
+      throw new ConflictException('Sản phẩm đã ngừng bán hoặc bị vô hiệu hóa');
+    }
+
     if (variant.stock < quantity) {
       throw new ConflictException(
         'Số lượng thêm vào vượt quá tồn kho hiện tại'
@@ -122,7 +126,12 @@ export class CartService {
       select: {
         id: true,
         sku: true,
-        stock: true
+        stock: true,
+        product: {
+          select: {
+            isActive: true
+          }
+        }
       }
     });
 
@@ -149,6 +158,12 @@ export class CartService {
       if (variant.stock < item.quantity) {
         throw new ConflictException(
           `Biến thể ${variant.sku} có tồn kho không đủ cho số lượng ${item.quantity}`
+        );
+      }
+
+      if (!variant.product.isActive) {
+        throw new ConflictException(
+          `Biến thể ${variant.sku} thuộc sản phẩm đã ngừng bán hoặc bị vô hiệu hóa`
         );
       }
     });

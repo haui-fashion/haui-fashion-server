@@ -13,12 +13,12 @@ import {
 } from 'class-validator';
 
 export class UpdateReviewDto {
-  @ApiPropertyOptional({ minimum: 0, maximum: 5 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 5 })
   @Label('Số sao đánh giá')
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(0)
+  @Min(1)
   @Max(5)
   star?: number;
 

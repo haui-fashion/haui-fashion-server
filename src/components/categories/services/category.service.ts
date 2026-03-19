@@ -7,51 +7,63 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import { Category } from '@prisma/client';
+import { Category, Role } from '@prisma/client';
 
 @Injectable()
 export class CategoryService {
   constructor(private readonly categoryRepository: CategoryRepository) {}
 
-  async findAll(query: QueryCategoryDto) {
-    return this.categoryRepository.findAll(query);
+  async findAll(query: QueryCategoryDto, userRole?: Role) {
+    return this.categoryRepository.findAll(query, {
+      includeInactive: userRole === Role.ADMIN
+    });
   }
 
-  async findById(id: string): Promise<Category> {
-    const category = await this.categoryRepository.findById(id);
+  async findById(id: string, userRole?: Role): Promise<Category> {
+    const category = await this.categoryRepository.findById(id, {
+      includeInactive: userRole === Role.ADMIN
+    });
     if (!category) {
       throw new NotFoundException(`Không tìm thấy danh mục với id ${id}`);
     }
     return category;
   }
 
-  async findBySlug(slug: string): Promise<Category> {
-    const category = await this.categoryRepository.findBySlug(slug);
+  async findBySlug(slug: string, userRole?: Role): Promise<Category> {
+    const category = await this.categoryRepository.findBySlug(slug, {
+      includeInactive: userRole === Role.ADMIN
+    });
     if (!category) {
       throw new NotFoundException(`Không tìm thấy danh mục với slug "${slug}"`);
     }
     return category;
   }
 
-  async findRootCategories(): Promise<Category[]> {
-    return this.categoryRepository.findRootCategories();
+  async findRootCategories(userRole?: Role): Promise<Category[]> {
+    return this.categoryRepository.findRootCategories({
+      includeInactive: userRole === Role.ADMIN
+    });
   }
 
-  async findChildren(parentId: string): Promise<Category[]> {
-    await this.findById(parentId);
-    return this.categoryRepository.findChildrenByParentId(parentId);
+  async findChildren(parentId: string, userRole?: Role): Promise<Category[]> {
+    await this.findById(parentId, userRole);
+    return this.categoryRepository.findChildrenByParentId(parentId, {
+      includeInactive: userRole === Role.ADMIN
+    });
   }
 
   async create(dto: CreateCategoryDto): Promise<Category> {
     const slug = dto.slug || this.generateSlug(dto.name);
 
-    const existing = await this.categoryRepository.findBySlug(slug);
+    const existing = await this.categoryRepository.findBySlug(slug, {
+      includeInactive: true
+    });
     if (existing) {
       throw new ConflictException(`Danh mục với slug "${slug}" đã tồn tại`);
     }
 
     if (dto.parentId) {
-      await this.findById(dto.parentId);
+      await this.findById(dto.parentId, Role.ADMIN);
     }
 
     return this.categoryRepository.createCategory({
@@ -67,7 +79,7 @@ export class CategoryService {
   }
 
   async update(id: string, dto: UpdateCategoryDto): Promise<Category> {
-    await this.findById(id);
+    await this.findById(id, Role.ADMIN);
 
     const updateData: Record<string, any> = { ...dto };
 
@@ -77,7 +89,10 @@ export class CategoryService {
 
     if (updateData.slug) {
       const existing = await this.categoryRepository.findBySlug(
-        updateData.slug as string
+        updateData.slug as string,
+        {
+          includeInactive: true
+        }
       );
       if (existing && existing.id !== id) {
         throw new ConflictException(
@@ -90,7 +105,7 @@ export class CategoryService {
       if (dto.parentId === id) {
         throw new ConflictException('Danh mục không thể làm cha của chính nó');
       }
-      await this.findById(dto.parentId);
+      await this.findById(dto.parentId, Role.ADMIN);
       updateData.parent = { connect: { id: dto.parentId } };
       delete updateData.parentId;
     }
@@ -99,14 +114,14 @@ export class CategoryService {
   }
 
   async softDelete(id: string): Promise<Category> {
-    await this.findById(id);
+    await this.findById(id, Role.ADMIN);
     return this.categoryRepository.updateCategory(id, {
       deletedAt: new Date()
     });
   }
 
   async toggleActive(id: string): Promise<Category> {
-    const category = await this.findById(id);
+    const category = await this.findById(id, Role.ADMIN);
     return this.categoryRepository.updateCategory(id, {
       isActive: !category.isActive
     });

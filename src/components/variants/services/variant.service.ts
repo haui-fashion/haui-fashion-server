@@ -8,7 +8,7 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import { Prisma, Variant } from '@prisma/client';
+import { Prisma, Role, Variant } from '@prisma/client';
 
 @Injectable()
 export class VariantService {
@@ -17,12 +17,16 @@ export class VariantService {
     private readonly prisma: PrismaService
   ) {}
 
-  async findAll(query: QueryVariantDto) {
-    return this.variantRepository.findAll(query);
+  async findAll(query: QueryVariantDto, userRole?: Role) {
+    return this.variantRepository.findAll(query, {
+      includeInactive: userRole === Role.ADMIN
+    });
   }
 
-  async findById(id: string) {
-    const variant = await this.variantRepository.findById(id);
+  async findById(id: string, userRole?: Role) {
+    const variant = await this.variantRepository.findById(id, {
+      includeInactive: userRole === Role.ADMIN
+    });
     if (!variant) {
       throw new NotFoundException(`Không tìm thấy biến thể với id ${id}`);
     }
@@ -32,7 +36,9 @@ export class VariantService {
   async create(dto: CreateVariantDto) {
     await this.assertProductExists(dto.productId);
 
-    const existing = await this.variantRepository.findBySku(dto.sku);
+    const existing = await this.variantRepository.findBySku(dto.sku, {
+      includeInactive: true
+    });
     if (existing) {
       throw new ConflictException(`Biến thể với sku "${dto.sku}" đã tồn tại`);
     }
@@ -61,7 +67,7 @@ export class VariantService {
   }
 
   async update(id: string, dto: UpdateVariantDto) {
-    await this.findById(id);
+    await this.findById(id, Role.ADMIN);
 
     const data: Prisma.VariantUpdateInput = {
       size: dto.size,
@@ -71,7 +77,9 @@ export class VariantService {
     };
 
     if (dto.sku) {
-      const existing = await this.variantRepository.findBySku(dto.sku);
+      const existing = await this.variantRepository.findBySku(dto.sku, {
+        includeInactive: true
+      });
       if (existing && existing.id !== id) {
         throw new ConflictException(`Biến thể với sku "${dto.sku}" đã tồn tại`);
       }
@@ -98,7 +106,7 @@ export class VariantService {
   }
 
   async remove(id: string): Promise<Variant> {
-    await this.findById(id);
+    await this.findById(id, Role.ADMIN);
 
     try {
       return await this.variantRepository.deleteVariant(id);

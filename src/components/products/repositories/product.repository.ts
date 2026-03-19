@@ -61,13 +61,20 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
     super(ProductEntity);
   }
 
-  async findAll(query: QueryProductDto): Promise<PaginatedData<Product>> {
+  async findAll(
+    query: QueryProductDto,
+    options?: { includeInactive?: boolean }
+  ): Promise<PaginatedData<Product>> {
     const { pagination, sort, filter, search } = query;
     const page = pagination?.page ?? 1;
     const limit = pagination?.limit ?? 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ProductWhereInput = {};
+
+    if (!options?.includeInactive) {
+      where.isActive = true;
+    }
 
     if (search) {
       where.OR = [
@@ -126,15 +133,30 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
     };
   }
 
-  async findById(id: string): Promise<ProductWithRelations | null> {
-    return this.datasource.findById(id, {
-      include: productInclude
-    }) as Promise<ProductWithRelations | null>;
+  async findById(
+    id: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<ProductWithRelations | null> {
+    return this.datasource.findOneByCondition(
+      {
+        id,
+        ...(!options?.includeInactive && { isActive: true })
+      } as Prisma.ProductWhereInput,
+      {
+        include: productInclude
+      }
+    ) as Promise<ProductWithRelations | null>;
   }
 
-  async findBySlug(slug: string): Promise<ProductWithRelations | null> {
+  async findBySlug(
+    slug: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<ProductWithRelations | null> {
     return this.datasource.findOneByCondition(
-      { slug } as Prisma.ProductWhereInput,
+      {
+        slug,
+        ...(!options?.includeInactive && { isActive: true })
+      } as Prisma.ProductWhereInput,
       {
         include: productInclude
       }
@@ -200,6 +222,8 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
       }
     });
 
-    return this.findById(productId) as Promise<ProductWithRelations>;
+    return this.findById(productId, {
+      includeInactive: true
+    }) as Promise<ProductWithRelations>;
   }
 }

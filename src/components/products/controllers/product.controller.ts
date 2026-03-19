@@ -3,7 +3,7 @@ import { GenerateProductDescriptionDto } from '@components/products/dtos/generat
 import { QueryProductDto } from '@components/products/dtos/query-product.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
 import { ProductService } from '@components/products/services/product.service';
-import { Public } from '@core/utilities/decorators/public.decorator';
+import { Public } from '@core/utilities/decorators';
 import { Roles } from '@core/utilities/decorators/roles.decorator';
 import {
   Body,
@@ -45,7 +45,7 @@ export class ProductController {
   @Get()
   @Public()
   @ApiOperation({
-    summary: 'Get all products with pagination, sorting, and filtering'
+    summary: 'Public list products (active only)'
   })
   findAll(@Query() query: QueryProductDto) {
     return this.productService.findAll(query);
@@ -53,14 +53,38 @@ export class ProductController {
 
   @Get('slug/:slug')
   @Public()
-  @ApiOperation({ summary: 'Get a product by slug' })
+  @ApiOperation({ summary: 'Public get product by slug (active only)' })
   findBySlug(@Param('slug') slug: string) {
     return this.productService.findBySlug(slug);
   }
 
+  @Get('admin')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin list products (active/inactive/all)' })
+  findAllForAdmin(@Query() query: QueryProductDto) {
+    return this.productService.findAll(query, Role.ADMIN);
+  }
+
+  @Get('admin/slug/:slug')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin get product by slug' })
+  findBySlugForAdmin(@Param('slug') slug: string) {
+    return this.productService.findBySlug(slug, Role.ADMIN);
+  }
+
+  @Get('admin/:id')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin get product by ID' })
+  findOneForAdmin(@Param('id') id: string) {
+    return this.productService.findById(id, Role.ADMIN);
+  }
+
   @Get(':id')
   @Public()
-  @ApiOperation({ summary: 'Get a product by ID' })
+  @ApiOperation({ summary: 'Public get product by ID (active only)' })
   findOne(@Param('id') id: string) {
     return this.productService.findById(id);
   }

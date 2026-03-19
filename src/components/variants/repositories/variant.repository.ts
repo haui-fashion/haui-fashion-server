@@ -1,6 +1,6 @@
+import { VariantDatasource } from '@components/variants/datasources/variant.datasource';
 import { QueryVariantDto } from '@components/variants/dtos/query-variant.dto';
 import { VariantEntity } from '@components/variants/entities/variant.entity';
-import { VariantDatasource } from '@components/variants/datasources/variant.datasource';
 import { PaginatedData } from '@core/utilities/interceptors';
 import {
   BaseRepository,
@@ -25,13 +25,22 @@ export class VariantRepository extends BaseRepository<VariantEntity, Variant> {
     super(VariantEntity);
   }
 
-  async findAll(query: QueryVariantDto): Promise<PaginatedData<Variant>> {
+  async findAll(
+    query: QueryVariantDto,
+    options?: { includeInactive?: boolean }
+  ): Promise<PaginatedData<Variant>> {
     const { pagination, sort, filter, search, productId } = query;
     const page = pagination?.page ?? 1;
     const limit = pagination?.limit ?? 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.VariantWhereInput = {};
+
+    if (!options?.includeInactive) {
+      where.product = {
+        isActive: true
+      };
+    }
 
     if (productId) {
       where.productId = productId;
@@ -93,15 +102,36 @@ export class VariantRepository extends BaseRepository<VariantEntity, Variant> {
     };
   }
 
-  async findById(id: string): Promise<VariantWithProduct | null> {
-    return this.datasource.findById(id, {
-      include: variantInclude
-    }) as Promise<VariantWithProduct | null>;
+  async findById(
+    id: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<VariantWithProduct | null> {
+    return this.datasource.findOneByCondition(
+      {
+        id,
+        ...(!options?.includeInactive && {
+          product: {
+            isActive: true
+          }
+        })
+      } as Prisma.VariantWhereInput,
+      {
+        include: variantInclude
+      }
+    ) as Promise<VariantWithProduct | null>;
   }
 
-  async findBySku(sku: string): Promise<Variant | null> {
+  async findBySku(
+    sku: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<Variant | null> {
     return this.datasource.findOneByCondition({
-      sku
+      sku,
+      ...(!options?.includeInactive && {
+        product: {
+          isActive: true
+        }
+      })
     } as Prisma.VariantWhereInput);
   }
 

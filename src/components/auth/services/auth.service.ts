@@ -53,6 +53,10 @@ export class AuthService {
       throw new UnauthorizedException('Thông tin đăng nhập không hợp lệ');
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Tài khoản đã bị khóa hoặc vô hiệu hóa');
+    }
+
     const isPasswordValid = await UserService.isPasswordMatch(
       dto.password,
       user.password
@@ -75,6 +79,12 @@ export class AuthService {
       const user = await this.userService.findById(payload.sub);
       if (!user) {
         throw new UnauthorizedException('Không tìm thấy người dùng');
+      }
+
+      if (!user.isActive) {
+        throw new UnauthorizedException(
+          'Tài khoản đã bị khóa hoặc vô hiệu hóa'
+        );
       }
 
       return this.appJwtService.generateTokenPair({

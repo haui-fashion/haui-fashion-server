@@ -17,7 +17,7 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import { Prisma, Product } from '@prisma/client';
+import { Prisma, Product, Role } from '@prisma/client';
 
 type NormalizedImageInput = {
   fileId: string;
@@ -34,20 +34,26 @@ export class ProductService {
     private readonly tiptapService: TiptapService
   ) {}
 
-  async findAll(query: QueryProductDto) {
-    return this.productRepository.findAll(query);
+  async findAll(query: QueryProductDto, userRole?: Role) {
+    return this.productRepository.findAll(query, {
+      includeInactive: userRole === Role.ADMIN
+    });
   }
 
-  async findById(id: string) {
-    const product = await this.productRepository.findById(id);
+  async findById(id: string, userRole?: Role) {
+    const product = await this.productRepository.findById(id, {
+      includeInactive: userRole === Role.ADMIN
+    });
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với id ${id}`);
     }
     return product;
   }
 
-  async findBySlug(slug: string) {
-    const product = await this.productRepository.findBySlug(slug);
+  async findBySlug(slug: string, userRole?: Role) {
+    const product = await this.productRepository.findBySlug(slug, {
+      includeInactive: userRole === Role.ADMIN
+    });
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với slug "${slug}"`);
     }
@@ -57,7 +63,9 @@ export class ProductService {
   async create(dto: CreateProductDto) {
     const slug = dto.slug || this.generateSlug(dto.name);
 
-    const existing = await this.productRepository.findBySlug(slug);
+    const existing = await this.productRepository.findBySlug(slug, {
+      includeInactive: true
+    });
     if (existing) {
       throw new ConflictException(`Sản phẩm với slug "${slug}" đã tồn tại`);
     }
@@ -108,7 +116,7 @@ export class ProductService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
-    await this.findById(id);
+    await this.findById(id, Role.ADMIN);
 
     const { descriptionJson, descriptionHtml } = this.sanitizeDescription(
       dto.description
@@ -129,7 +137,9 @@ export class ProductService {
 
     if (dto.slug || (dto.name && !dto.slug)) {
       const nextSlug = dto.slug || this.generateSlug(dto.name as string);
-      const existing = await this.productRepository.findBySlug(nextSlug);
+      const existing = await this.productRepository.findBySlug(nextSlug, {
+        includeInactive: true
+      });
       if (existing && existing.id !== id) {
         throw new ConflictException(
           `Sản phẩm với slug "${nextSlug}" đã tồn tại`
@@ -182,7 +192,7 @@ export class ProductService {
         throw error;
       }
 
-      return this.findById(id);
+      return this.findById(id, Role.ADMIN);
     }
 
     try {
@@ -196,11 +206,11 @@ export class ProductService {
       throw error;
     }
 
-    return this.findById(id);
+    return this.findById(id, Role.ADMIN);
   }
 
   async remove(id: string): Promise<Product> {
-    await this.findById(id);
+    await this.findById(id, Role.ADMIN);
 
     try {
       return await this.productRepository.deleteProduct(id);
@@ -218,7 +228,7 @@ export class ProductService {
   }
 
   async toggleActive(id: string) {
-    const product = await this.findById(id);
+    const product = await this.findById(id, Role.ADMIN);
 
     return await this.productRepository.updateProduct(id, {
       isActive: !product.isActive
@@ -226,7 +236,7 @@ export class ProductService {
   }
 
   async softDeleteStock(id: string) {
-    await this.findById(id);
+    await this.findById(id, Role.ADMIN);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.product.update({
@@ -242,7 +252,7 @@ export class ProductService {
       });
     });
 
-    return this.findById(id);
+    return this.findById(id, Role.ADMIN);
   }
 
   async generateDescriptionJson(dto: GenerateProductDescriptionDto) {
