@@ -4,10 +4,9 @@ import {
   GEMINI_MODEL_CONFIG_PATHS
 } from '@core/modules/gemini/constants/gemini.constants';
 import { ImageGenerationResult } from '@core/modules/gemini/entities/image-generation-result.entity';
-import { GoogleGenAI } from '@google/genai';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GEMINI_CLIENT } from '../gemini.provider';
+import { GeminiGenerationService } from './gemini-generation.service';
 
 @Injectable()
 export class GeminiImageService {
@@ -15,8 +14,8 @@ export class GeminiImageService {
   private readonly model: string;
 
   constructor(
-    @Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly geminiGenerationService: GeminiGenerationService
   ) {
     this.model =
       this.configService.get<string>(GEMINI_MODEL_CONFIG_PATHS.image) ||
@@ -24,9 +23,12 @@ export class GeminiImageService {
   }
 
   async generateImage(prompt: string): Promise<ImageGenerationResult> {
-    const response = await this.ai.models.generateContent({
+    const response = await this.geminiGenerationService.generate({
       model: this.model,
-      contents: prompt
+      contents: prompt,
+      config: {
+        responseModalities: ['IMAGE']
+      }
     });
 
     return this.extractImageFromResponse(response);
@@ -47,9 +49,12 @@ export class GeminiImageService {
       }
     ];
 
-    const response = await this.ai.models.generateContent({
+    const response = await this.geminiGenerationService.generate({
       model: this.model,
-      contents
+      contents,
+      config: {
+        responseModalities: ['IMAGE']
+      }
     });
 
     return this.extractImageFromResponse(response);
@@ -83,9 +88,12 @@ export class GeminiImageService {
       }
     ];
 
-    const response = await this.ai.models.generateContent({
+    const response = await this.geminiGenerationService.generate({
       model: this.model,
-      contents
+      contents,
+      config: {
+        responseModalities: ['IMAGE']
+      }
     });
 
     return this.extractImageFromResponse(response);

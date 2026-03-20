@@ -4,6 +4,7 @@ import { CartsModule } from '@components/carts/carts.module';
 import { CategoryModule } from '@components/categories/categories.module';
 import { FilesModule } from '@components/files/files.module';
 import { OrdersModule } from '@components/orders/orders.module';
+import { ProductEmbeddingModule } from '@components/product-embedding/product-embedding.module';
 import { ProductsModule } from '@components/products/products.module';
 import { ReviewsModule } from '@components/reviews/reviews.module';
 import { UserModule } from '@components/users/users.module';
@@ -19,6 +20,7 @@ import { Module } from '@nestjs/common';
     AddressModule,
     CartsModule,
     OrdersModule,
+    ProductEmbeddingModule,
     ProductsModule,
     ReviewsModule,
     VariantsModule

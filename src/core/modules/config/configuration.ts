@@ -5,6 +5,7 @@ export default () => ({
     port: parseInt(process.env.PORT || '3000', 10),
     corsOrigins: process.env.CORS_ORIGINS || '*'
   },
+  timezone: process.env.APP_TIMEZONE || 'Asia/Ho_Chi_Minh',
   database: {
     postgres: {
       url: process.env.DATABASE_URL
@@ -41,5 +42,9 @@ export default () => ({
       embedding: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
       generation: process.env.GEMINI_GENERATION_MODEL || 'gemini-2.5-flash'
     }
+  },
+  embedding: {
+    embeddingTaskType:
+      process.env.PRODUCT_EMBEDDING_TASK_TYPE || 'RETRIEVAL_DOCUMENT'
   }
 });

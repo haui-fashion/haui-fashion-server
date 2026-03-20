@@ -18,14 +18,27 @@ const isProduction = process.env.NODE_ENV === 'production';
           : winston.format.combine(
               winston.format.colorize({ all: true }),
               winston.format.printf(
-                ({ level, message, timestamp, context, ...meta }) => {
+                ({
+                  level,
+                  message,
+                  timestamp,
+                  context,
+                  fileLocation,
+                  fileDir,
+                  ...meta
+                }) => {
                   const contextStr = context
                     ? `[${typeof context === 'string' ? context : JSON.stringify(context)}]`
                     : '';
+                  const sourceStr = fileLocation
+                    ? `[${typeof fileLocation === 'string' ? fileLocation : JSON.stringify(fileLocation)}]`
+                    : fileDir
+                      ? `[${typeof fileDir === 'string' ? fileDir : JSON.stringify(fileDir)}]`
+                      : '';
                   const metaStr = Object.keys(meta).length
                     ? ` ${JSON.stringify(meta)}`
                     : '';
-                  return `${String(timestamp)} ${String(level)} ${contextStr} ${String(message)}${metaStr}`;
+                  return `${String(timestamp)} ${String(level)} ${contextStr}${sourceStr} ${String(message)}${metaStr}`;
                 }
               )
             )

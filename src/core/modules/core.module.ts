@@ -22,6 +22,7 @@ import { ValidationPipe } from '@core/utilities/pipes';
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
@@ -38,6 +39,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     AppJwtModule,
     AppMailModule,
     GeminiModule,
+    ScheduleModule.forRoot(),
     TiptapModule,
     ThrottlerModule.forRoot([
       {

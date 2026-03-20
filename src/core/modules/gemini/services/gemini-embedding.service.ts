@@ -1,4 +1,5 @@
 import {
+  GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
   GEMINI_EMBEDDING_MODEL,
   GEMINI_MODEL_CONFIG_PATHS
 } from '@core/modules/gemini/constants/gemini.constants';
@@ -25,7 +26,10 @@ export class GeminiEmbeddingService {
     const response = await this.ai.models.embedContent({
       model: this.model,
       contents: text,
-      ...(taskType && { config: { taskType } })
+      config: {
+        outputDimensionality: GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
+        ...(taskType && { taskType })
+      }
     });
 
     const embedding = response.embeddings?.[0]?.values;
@@ -43,7 +47,10 @@ export class GeminiEmbeddingService {
     const response = await this.ai.models.embedContent({
       model: this.model,
       contents: texts,
-      ...(taskType && { config: { taskType } })
+      config: {
+        outputDimensionality: GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
+        ...(taskType && { taskType })
+      }
     });
 
     const embeddings = response.embeddings?.map((e) => e.values ?? []);

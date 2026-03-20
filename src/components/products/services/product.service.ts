@@ -5,9 +5,10 @@ import {
 import { GenerateProductDescriptionDto } from '@components/products/dtos/generate-product-description.dto';
 import { QueryProductDto } from '@components/products/dtos/query-product.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
+import { GeneratedProductDescription } from '@components/products/entities/generated-product-description.entity';
+import { NormalizedImage } from '@components/products/entities/normalized-image.entity';
 import { ProductRepository } from '@components/products/repositories/product.repository';
-import { GeminiGenerationService } from '@core/modules/gemini';
-import { GeminiGeneratedDescription } from '@core/modules/gemini/entities/gemini-generated-description.entity';
+import { ProductDescriptionGenerationService } from '@components/products/services/product-description-generation.service';
 import { PrismaService } from '@core/modules/prisma';
 import { TiptapService } from '@core/modules/tiptap';
 import {
@@ -17,20 +18,14 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import { Prisma, Product, Role } from '@prisma/client';
-
-type NormalizedImageInput = {
-  fileId: string;
-  isPrimary: boolean;
-  position: number;
-};
+import { EmbeddingSyncStatus, Prisma, Product, Role } from '@prisma/client';
 
 @Injectable()
 export class ProductService {
   constructor(
     private readonly productRepository: ProductRepository,
     private readonly prisma: PrismaService,
-    private readonly geminiGenerationService: GeminiGenerationService,
+    private readonly productDescriptionGenerationService: ProductDescriptionGenerationService,
     private readonly tiptapService: TiptapService
   ) {}
 
@@ -91,6 +86,10 @@ export class ProductService {
       season: dto.season,
       fit: dto.fit,
       isActive: dto.isActive ?? true,
+      embeddingDirty: true,
+      embeddingSyncStatus: EmbeddingSyncStatus.PENDING,
+      embeddingContentHash: null,
+      embeddingUpdatedAt: null,
       ...(dto.categoryId && {
         category: { connect: { id: dto.categoryId } }
       }),
@@ -117,6 +116,7 @@ export class ProductService {
 
   async update(id: string, dto: UpdateProductDto) {
     await this.findById(id, Role.ADMIN);
+    const shouldMarkEmbeddingDirty = this.hasEmbeddingRelevantChanges(dto);
 
     const { descriptionJson, descriptionHtml } = this.sanitizeDescription(
       dto.description
@@ -132,7 +132,11 @@ export class ProductService {
       material: dto.material,
       season: dto.season,
       fit: dto.fit,
-      isActive: dto.isActive
+      isActive: dto.isActive,
+      ...(shouldMarkEmbeddingDirty && {
+        embeddingDirty: true,
+        embeddingSyncStatus: EmbeddingSyncStatus.PENDING
+      })
     };
 
     if (dto.slug || (dto.name && !dto.slug)) {
@@ -231,7 +235,9 @@ export class ProductService {
     const product = await this.findById(id, Role.ADMIN);
 
     return await this.productRepository.updateProduct(id, {
-      isActive: !product.isActive
+      isActive: !product.isActive,
+      embeddingDirty: true,
+      embeddingSyncStatus: EmbeddingSyncStatus.PENDING
     });
   }
 
@@ -242,7 +248,9 @@ export class ProductService {
       await tx.product.update({
         where: { id },
         data: {
-          isActive: false
+          isActive: false,
+          embeddingDirty: true,
+          embeddingSyncStatus: EmbeddingSyncStatus.PENDING
         }
       });
 
@@ -256,20 +264,12 @@ export class ProductService {
   }
 
   async generateDescriptionJson(dto: GenerateProductDescriptionDto) {
-    let sections: GeminiGeneratedDescription;
+    let sections: GeneratedProductDescription;
     try {
-      sections = await this.geminiGenerationService.generateProductSections({
-        name: dto.name,
-        brand: dto.brand,
-        gender: dto.gender,
-        styleTags: dto.styleTags,
-        material: dto.material,
-        season: dto.season,
-        fit: dto.fit,
-        categoryName: dto.categoryName,
-        highlights: dto.highlights,
-        images: dto.images || []
-      });
+      sections =
+        await this.productDescriptionGenerationService.generateProductSections(
+          dto
+        );
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -325,9 +325,7 @@ export class ProductService {
     }
   }
 
-  private normalizeImages(
-    images?: ProductImageInputDto[]
-  ): NormalizedImageInput[] {
+  private normalizeImages(images?: ProductImageInputDto[]): NormalizedImage[] {
     if (!images || images.length === 0) {
       return [];
     }
@@ -406,8 +404,24 @@ export class ProductService {
     return typeof target === 'string' ? target.includes(field) : false;
   }
 
+  private hasEmbeddingRelevantChanges(dto: UpdateProductDto): boolean {
+    return (
+      dto.name !== undefined ||
+      dto.slug !== undefined ||
+      dto.description !== undefined ||
+      dto.brand !== undefined ||
+      dto.gender !== undefined ||
+      dto.styleTags !== undefined ||
+      dto.material !== undefined ||
+      dto.season !== undefined ||
+      dto.fit !== undefined ||
+      dto.categoryId !== undefined ||
+      dto.isActive !== undefined
+    );
+  }
+
   private buildCommonDescriptionTiptap(
-    sections: GeminiGeneratedDescription
+    sections: GeneratedProductDescription
   ): Record<string, unknown> {
     const content: Array<Record<string, unknown>> = [
       this.headingNode('Tên sản phẩm'),

@@ -39,6 +39,26 @@ enum PaymentStatus {
   FAILED
 }
 
+enum EmbeddingSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum BatchJobPhase {
+  SUMMARY
+  EMBEDDING
+}
+
+enum BatchJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
 model EntitySequence {
   key          String   @id
   currentValue Int      @default(0) @map("current_value")
@@ -152,6 +172,11 @@ model Product {
 
   isActive Boolean @default(true) @map("is_active")
 
+  embeddingSyncStatus EmbeddingSyncStatus @default(PENDING) @map("embedding_sync_status")
+  embeddingDirty      Boolean             @default(true) @map("embedding_dirty")
+  embeddingContentHash String?            @map("embedding_content_hash")
+  embeddingUpdatedAt  DateTime?           @map("embedding_updated_at")
+
   categoryId String? @map("category_id")
   category   Category? @relation(fields: [categoryId], references: [id])
 
@@ -161,9 +186,66 @@ model Product {
   images   ProductImage[]
   variants Variant[]
   reviews  Review[]
+  embeddings ProductEmbedding[]
 
   @@index([categoryId])
+  @@index([embeddingDirty, updatedAt])
+  @@index([embeddingSyncStatus])
   @@map("products")
+}
+
+model ProductEmbedding {
+  id               String              @id @default(uuid())
+
+  productId        String              @map("product_id")
+  product          Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  modelName        String              @map("model_name")
+  summaryModel     String?             @map("summary_model")
+  embeddingVector  Unsupported("vector") @map("embedding_vector")
+  embeddingDim     Int                 @map("embedding_dim")
+  embeddingInputText String            @map("embedding_input_text") @db.Text
+  summaryText      String?             @map("summary_text") @db.Text
+  semanticContext  String?             @map("semantic_context") @db.Text
+  contentHash      String              @map("content_hash")
+  status           EmbeddingSyncStatus @default(SYNCED)
+  errorMessage     String?             @map("error_message") @db.Text
+  lastEmbeddedAt   DateTime?           @map("last_embedded_at")
+  isActive         Boolean             @default(true) @map("is_active")
+
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  @@unique([productId, modelName], map: "product_embeddings_product_model_unique")
+  @@index([productId, isActive])
+  @@index([status])
+  @@index([contentHash])
+  @@map("product_embeddings")
+}
+
+model EmbeddingBatchJob {
+  id              String         @id @default(uuid())
+  phase           BatchJobPhase
+  status          BatchJobStatus @default(PENDING)
+  
+  geminiBatchName String?        @map("gemini_batch_name")
+  geminiFileName  String?        @map("gemini_file_name")
+  
+  productIds      Json           @map("product_ids")
+  productCount    Int            @map("product_count")
+  
+  summaryResults  Json?          @map("summary_results")
+  
+  errorMessage    String?        @map("error_message") @db.Text
+  
+  startedAt       DateTime?      @map("started_at")
+  completedAt     DateTime?      @map("completed_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([status, phase])
+  @@index([createdAt])
+  @@map("embedding_batch_jobs")
 }
 
 model Review {

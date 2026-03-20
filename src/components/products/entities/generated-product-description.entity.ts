@@ -1,4 +1,4 @@
-export class GeminiGeneratedDescription {
+export class GeneratedProductDescription {
   productName: string;
   shortPreview: string;
   keyFeatures: string[];

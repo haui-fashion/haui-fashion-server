@@ -1,6 +1,9 @@
+import { BatchJobOrchestratorService } from '@components/product-embedding/services/batch-job-orchestrator.service';
 import { CreateProductDto } from '@components/products/dtos/create-product.dto';
 import { GenerateProductDescriptionDto } from '@components/products/dtos/generate-product-description.dto';
 import { QueryProductDto } from '@components/products/dtos/query-product.dto';
+import { SyncProductEmbeddingDto } from '@components/products/dtos/sync-product-embedding-by-id.dto';
+import { SyncProductEmbeddingsDto } from '@components/products/dtos/sync-product-embeddings.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
 import { ProductService } from '@components/products/services/product.service';
 import { Public } from '@core/utilities/decorators';
@@ -21,7 +24,10 @@ import { Role } from '@prisma/client';
 @ApiTags('Products')
 @Controller({ path: 'products', version: '1' })
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(
+    private readonly productService: ProductService,
+    private readonly batchJobOrchestratorService: BatchJobOrchestratorService
+  ) {}
 
   @Post()
   @ApiBearerAuth()
@@ -40,6 +46,46 @@ export class ProductController {
   })
   generateDescription(@Body() dto: GenerateProductDescriptionDto) {
     return this.productService.generateDescriptionJson(dto);
+  }
+
+  @Post('embeddings/sync')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Start embedding batch pipeline'
+  })
+  syncEmbeddings(@Body() dto: SyncProductEmbeddingsDto) {
+    return this.batchJobOrchestratorService.startPipeline({
+      force: dto.force,
+      limit: dto.limit
+    });
+  }
+
+  @Post('embeddings/resync')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Force start embedding batch pipeline'
+  })
+  resyncEmbeddings(@Body() dto: SyncProductEmbeddingsDto) {
+    return this.batchJobOrchestratorService.startPipeline({
+      force: true,
+      limit: dto.limit
+    });
+  }
+
+  @Post('embeddings/sync/:id')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Run pipeline for a specific product' })
+  syncEmbeddingById(
+    @Param('id') id: string,
+    @Body() dto: SyncProductEmbeddingDto
+  ) {
+    return this.batchJobOrchestratorService.startPipeline({
+      productId: id,
+      force: dto.force
+    });
   }
 
   @Get()

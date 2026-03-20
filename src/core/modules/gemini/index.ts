@@ -1,7 +1,5 @@
 export * from './constants/gemini.constants';
-export * from './dtos/generate-product-description-input.dto';
 export * from './entities/chat-message.entity';
-export * from './entities/gemini-generated-description.entity';
 export * from './entities/image-generation-result.entity';
 export * from './gemini.module';
 export * from './gemini.provider';

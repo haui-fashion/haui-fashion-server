@@ -3,10 +3,9 @@ import {
   GEMINI_MODEL_CONFIG_PATHS
 } from '@core/modules/gemini/constants/gemini.constants';
 import { ChatMessage } from '@core/modules/gemini/entities/chat-message.entity';
-import { GoogleGenAI } from '@google/genai';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GEMINI_CLIENT } from '../gemini.provider';
+import { GeminiGenerationService } from './gemini-generation.service';
 
 @Injectable()
 export class GeminiChatService {
@@ -14,8 +13,8 @@ export class GeminiChatService {
   private readonly model: string;
 
   constructor(
-    @Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly geminiGenerationService: GeminiGenerationService
   ) {
     this.model =
       this.configService.get<string>(GEMINI_MODEL_CONFIG_PATHS.chat) ||
@@ -26,18 +25,13 @@ export class GeminiChatService {
     prompt: string,
     systemInstruction?: string
   ): Promise<string> {
-    const response = await this.ai.models.generateContent({
-      model: this.model,
+    const text = await this.geminiGenerationService.generateText({
       contents: prompt,
-      ...(systemInstruction && {
-        config: { systemInstruction }
-      })
+      model: this.model,
+      config: {
+        ...(systemInstruction && { systemInstruction })
+      }
     });
-
-    const text = response.text;
-    if (!text) {
-      throw new Error('Gemini không trả về phản hồi văn bản');
-    }
 
     this.logger.debug(`Generated content: ${text.substring(0, 100)}...`);
     return text;
@@ -59,18 +53,13 @@ export class GeminiChatService {
       }
     ];
 
-    const response = await this.ai.models.generateContent({
-      model: this.model,
+    const text = await this.geminiGenerationService.generateText({
       contents,
-      ...(systemInstruction && {
-        config: { systemInstruction }
-      })
+      model: this.model,
+      config: {
+        ...(systemInstruction && { systemInstruction })
+      }
     });
-
-    const text = response.text;
-    if (!text) {
-      throw new Error('Gemini không trả về phản hồi văn bản');
-    }
 
     this.logger.debug(`Chat response: ${text.substring(0, 100)}...`);
     return text;
