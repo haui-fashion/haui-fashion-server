@@ -16,7 +16,11 @@ type VariantWithProduct = Prisma.VariantGetPayload<{
 }>;
 
 const variantInclude = {
-  product: true
+  product: true,
+  images: {
+    include: { file: true },
+    orderBy: { position: 'asc' as const }
+  }
 } as const;
 
 @Injectable()

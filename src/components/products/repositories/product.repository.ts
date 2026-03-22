@@ -48,6 +48,13 @@ const productInclude = {
   variants: {
     orderBy: {
       createdAt: 'desc'
+    },
+    include: {
+      images: {
+        include: {
+          file: true
+        }
+      }
     }
   }
 } as const;

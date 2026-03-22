@@ -30,4 +30,8 @@ export class VariantEntity extends BaseEntity {
   @Expose()
   @ApiProperty({ required: false, type: Object })
   product?: Record<string, unknown>;
+
+  @Expose()
+  @ApiProperty({ required: false, type: [Object] })
+  images?: Record<string, unknown>[];
 }

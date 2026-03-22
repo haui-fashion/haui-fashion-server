@@ -105,6 +105,7 @@ model File {
   createdAt DateTime @default(now()) @map("created_at")
 
   productImages ProductImage[]
+  variantImages VariantImage[]
   reviews       Review[]
 
   @@index([userId])
@@ -309,9 +310,29 @@ model Variant {
 
   cartItems  CartItem[]
   orderItems OrderItem[]
+  images     VariantImage[]
 
   @@index([productId])
   @@map("variants")
+}
+
+model VariantImage {
+  id String @id @default(uuid())
+
+  variantId String  @map("variant_id")
+  variant   Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  fileId String @map("file_id")
+  file   File   @relation(fields: [fileId], references: [id])
+
+  isPrimary Boolean @default(false) @map("is_primary")
+  position  Int     @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([variantId])
+  @@index([fileId])
+  @@map("variant_images")
 }
 
 model Cart {

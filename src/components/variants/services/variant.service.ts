@@ -1,14 +1,24 @@
-import { CreateVariantDto } from '@components/variants/dtos/create-variant.dto';
+import {
+  CreateVariantDto,
+  VariantImageInputDto
+} from '@components/variants/dtos/create-variant.dto';
 import { QueryVariantDto } from '@components/variants/dtos/query-variant.dto';
 import { UpdateVariantDto } from '@components/variants/dtos/update-variant.dto';
 import { VariantRepository } from '@components/variants/repositories/variant.repository';
 import { PrismaService } from '@core/modules/prisma';
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException
 } from '@nestjs/common';
 import { Prisma, Role, Variant } from '@prisma/client';
+
+interface NormalizedImage {
+  fileId: string;
+  isPrimary: boolean;
+  position: number;
+}
 
 @Injectable()
 export class VariantService {
@@ -43,6 +53,9 @@ export class VariantService {
       throw new ConflictException(`Biến thể với sku "${dto.sku}" đã tồn tại`);
     }
 
+    const normalizedImages = this.normalizeImages(dto.images);
+    await this.assertFilesExist(normalizedImages.map((img) => img.fileId));
+
     const data: Prisma.VariantCreateInput = {
       size: dto.size,
       color: dto.color,
@@ -53,7 +66,16 @@ export class VariantService {
         connect: {
           id: dto.productId
         }
-      }
+      },
+      ...(normalizedImages.length > 0 && {
+        images: {
+          create: normalizedImages.map((img) => ({
+            isPrimary: img.isPrimary,
+            position: img.position,
+            file: { connect: { id: img.fileId } }
+          }))
+        }
+      })
     };
 
     try {
@@ -95,6 +117,44 @@ export class VariantService {
       };
     }
 
+    if (dto.images !== undefined) {
+      const normalizedImages = this.normalizeImages(dto.images);
+      await this.assertFilesExist(normalizedImages.map((img) => img.fileId));
+
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.variant.update({
+            where: { id },
+            data
+          });
+
+          await tx.variantImage.deleteMany({
+            where: { variantId: id }
+          });
+
+          if (normalizedImages.length > 0) {
+            await tx.variantImage.createMany({
+              data: normalizedImages.map((img) => ({
+                variantId: id,
+                fileId: img.fileId,
+                isPrimary: img.isPrimary,
+                position: img.position
+              }))
+            });
+          }
+        });
+      } catch (error) {
+        if (this.isUniqueConstraintError(error, 'sku')) {
+          throw new ConflictException(
+            `Biến thể với sku "${dto.sku}" đã tồn tại`
+          );
+        }
+        throw error;
+      }
+
+      return this.findById(id, Role.ADMIN);
+    }
+
     try {
       return await this.variantRepository.updateVariant(id, data);
     } catch (error) {
@@ -123,6 +183,54 @@ export class VariantService {
     }
   }
 
+  private normalizeImages(images?: VariantImageInputDto[]): NormalizedImage[] {
+    if (!images || images.length === 0) {
+      return [];
+    }
+
+    const normalized = images.map((image, index) => {
+      const fileId = image.fileId || image.file?.id;
+
+      if (!fileId) {
+        throw new BadRequestException(
+          'Mỗi ảnh phải có fileId hoặc file.id hợp lệ'
+        );
+      }
+
+      return {
+        fileId,
+        isPrimary: image.isPrimary ?? false,
+        position: image.position ?? index
+      };
+    });
+
+    const seen = new Set<string>();
+    const deduped = normalized.filter((image) => {
+      if (seen.has(image.fileId)) {
+        return false;
+      }
+      seen.add(image.fileId);
+      return true;
+    });
+
+    const primaryCount = deduped.filter((image) => image.isPrimary).length;
+    if (primaryCount === 0 && deduped.length > 0) {
+      deduped[0].isPrimary = true;
+    }
+    if (primaryCount > 1) {
+      let marked = false;
+      deduped.forEach((image) => {
+        if (image.isPrimary && !marked) {
+          marked = true;
+          return;
+        }
+        image.isPrimary = false;
+      });
+    }
+
+    return deduped;
+  }
+
   private async assertProductExists(productId: string) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -132,6 +240,26 @@ export class VariantService {
     if (!product) {
       throw new NotFoundException(
         `Không tìm thấy sản phẩm với id ${productId}`
+      );
+    }
+  }
+
+  private async assertFilesExist(fileIds: string[]) {
+    if (fileIds.length === 0) {
+      return;
+    }
+
+    const uniqueIds = [...new Set(fileIds)];
+    const existing = await this.prisma.file.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true }
+    });
+
+    if (existing.length !== uniqueIds.length) {
+      const existingSet = new Set(existing.map((f) => f.id));
+      const missingIds = uniqueIds.filter((id) => !existingSet.has(id));
+      throw new NotFoundException(
+        `Không tìm thấy file với id: ${missingIds.join(', ')}`
       );
     }
   }
