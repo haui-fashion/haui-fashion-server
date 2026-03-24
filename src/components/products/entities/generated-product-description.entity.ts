@@ -8,4 +8,5 @@ export class GeneratedProductDescription {
   stylingSuggestions: string[];
   packageIncludes: string[];
   seoKeywords: string[];
+  shortDescription: string;
 }

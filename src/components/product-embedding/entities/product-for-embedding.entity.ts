@@ -4,6 +4,7 @@ export class ProductForEmbedding {
   id: string;
   name: string;
   descriptionHtml: string | null;
+  shortDescription: string | null;
   brand: string | null;
   gender: string | null;
   styleTags: Prisma.JsonValue | null;

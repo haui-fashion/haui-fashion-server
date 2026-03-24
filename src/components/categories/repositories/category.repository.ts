@@ -8,14 +8,13 @@ import {
 } from '@core/utilities/repositories';
 import { Injectable } from '@nestjs/common';
 import { Category, Prisma } from '@prisma/client';
+import { MAX_PARENT_DEPTH } from '../constants/category.constant';
 
 @Injectable()
 export class CategoryRepository extends BaseRepository<
   CategoryEntity,
   Category
 > {
-  private static readonly MAX_PARENT_DEPTH = 10;
-
   constructor(private readonly datasource: CategoryDatasource) {
     super(CategoryEntity);
   }
@@ -80,7 +79,7 @@ export class CategoryRepository extends BaseRepository<
       take: limit,
       orderBy: finalOrderBy,
       include: {
-        parent: this.buildParentInclude(CategoryRepository.MAX_PARENT_DEPTH)
+        parent: this.buildParentInclude(MAX_PARENT_DEPTH)
       }
     });
     const countPromise = this.datasource.count(where);
@@ -119,7 +118,7 @@ export class CategoryRepository extends BaseRepository<
       } as Prisma.CategoryWhereInput,
       {
         include: {
-          parent: this.buildParentInclude(CategoryRepository.MAX_PARENT_DEPTH)
+          parent: this.buildParentInclude(MAX_PARENT_DEPTH)
         }
       }
     );

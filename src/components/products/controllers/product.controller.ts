@@ -52,12 +52,13 @@ export class ProductController {
   @ApiBearerAuth()
   @Roles(Role.ADMIN)
   @ApiOperation({
-    summary: 'Start embedding batch pipeline'
+    summary: 'Start local embedding sync pipeline'
   })
   syncEmbeddings(@Body() dto: SyncProductEmbeddingsDto) {
-    return this.batchJobOrchestratorService.startPipeline({
+    return this.batchJobOrchestratorService.startEmbeddingPipeline({
       force: dto.force,
-      limit: dto.limit
+      limit: dto.limit,
+      batchSize: dto.batchSize
     });
   }
 
@@ -65,12 +66,13 @@ export class ProductController {
   @ApiBearerAuth()
   @Roles(Role.ADMIN)
   @ApiOperation({
-    summary: 'Force start embedding batch pipeline'
+    summary: 'Force start local embedding sync pipeline'
   })
   resyncEmbeddings(@Body() dto: SyncProductEmbeddingsDto) {
-    return this.batchJobOrchestratorService.startPipeline({
+    return this.batchJobOrchestratorService.startEmbeddingPipeline({
       force: true,
-      limit: dto.limit
+      limit: dto.limit,
+      batchSize: dto.batchSize
     });
   }
 
@@ -82,7 +84,7 @@ export class ProductController {
     @Param('id') id: string,
     @Body() dto: SyncProductEmbeddingDto
   ) {
-    return this.batchJobOrchestratorService.startPipeline({
+    return this.batchJobOrchestratorService.startEmbeddingPipeline({
       productId: id,
       force: dto.force
     });

@@ -6,8 +6,10 @@ import { AppBullModule } from '@core/modules/bull';
 import { AppBullBoardModule } from '@core/modules/bull-board';
 import { CloudinaryModule } from '@core/modules/cloudinary/cloudinary.module';
 import { AppConfigModule } from '@core/modules/config';
+import { EmbeddingModule } from '@core/modules/embedding';
 import { GeminiModule } from '@core/modules/gemini';
 import { HealthModule } from '@core/modules/health';
+import { HttpClientModule } from '@core/modules/http-client/http-client.module';
 import { LoggerModule } from '@core/modules/logger';
 import { AppMailModule } from '@core/modules/mail/mail.module';
 import { PrismaModule } from '@core/modules/prisma';
@@ -34,10 +36,12 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     AppBullBoardModule,
     CloudinaryModule,
     HealthModule,
+    HttpClientModule,
     EventEmitterModule.forRoot(),
     PrismaModule,
     AppJwtModule,
     AppMailModule,
+    EmbeddingModule,
     GeminiModule,
     ScheduleModule.forRoot(),
     TiptapModule,

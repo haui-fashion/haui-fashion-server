@@ -70,6 +70,12 @@ export class CreateProductDto {
   description?: Record<string, unknown>;
 
   @ApiPropertyOptional()
+  @Label('Mô tả ngắn dùng cho semantic embedding')
+  @IsOptional()
+  @IsString()
+  shortDescription?: string;
+
+  @ApiPropertyOptional()
   @Label('Thương hiệu')
   @IsOptional()
   @IsString()

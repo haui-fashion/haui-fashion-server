@@ -67,6 +67,12 @@ export class CreateVariantDto {
   @IsString()
   color: string;
 
+  @ApiPropertyOptional()
+  @Label('Mã màu hex')
+  @IsOptional()
+  @IsString()
+  hexColor?: string;
+
   @ApiProperty()
   @Label('SKU')
   @IsNotEmpty()

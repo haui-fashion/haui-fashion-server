@@ -5,8 +5,10 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  MinLength
+  MinLength,
+  IsDateString
 } from 'class-validator';
+import { Gender } from '@prisma/client';
 
 export enum Role {
   CUSTOMER = 'CUSTOMER',
@@ -39,4 +41,19 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(Role)
   role?: Role;
+
+  @Label('Số điện thoại')
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @Label('Ngày sinh')
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
+
+  @Label('Giới tính')
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
 }

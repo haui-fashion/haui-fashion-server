@@ -1,4 +1,5 @@
 import { AddressModule } from '@components/addresses/addresses.module';
+import { LocationModule } from '@components/locations/location.module';
 import { AuthModule } from '@components/auth/auth.module';
 import { CartsModule } from '@components/carts/carts.module';
 import { CategoryModule } from '@components/categories/categories.module';
@@ -23,7 +24,8 @@ import { Module } from '@nestjs/common';
     ProductEmbeddingModule,
     ProductsModule,
     ReviewsModule,
-    VariantsModule
+    VariantsModule,
+    LocationModule
   ],
   controllers: [],
   providers: [],

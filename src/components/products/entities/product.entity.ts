@@ -22,6 +22,10 @@ export class ProductEntity extends BaseEntity {
 
   @Expose()
   @ApiProperty({ required: false })
+  shortDescription?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   brand?: string;
 
   @Expose()

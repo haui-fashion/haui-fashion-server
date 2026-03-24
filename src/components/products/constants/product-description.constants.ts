@@ -1,6 +1,7 @@
 export const PRODUCT_DESCRIPTION_REQUIRED_FIELDS = [
   'productName',
   'shortPreview',
+  'shortDescription',
   'keyFeatures',
   'materialAndBuild',
   'preserver',
@@ -16,6 +17,7 @@ export const PRODUCT_DESCRIPTION_RESPONSE_SCHEMA = {
   properties: {
     productName: { type: 'string' },
     shortPreview: { type: 'string' },
+    shortDescription: { type: 'string' },
     keyFeatures: {
       type: 'array',
       items: { type: 'string' }

@@ -5,16 +5,28 @@
 
 */
 -- CreateEnum
-CREATE TYPE "BatchJobPhase" AS ENUM ('SUMMARY', 'EMBEDDING');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'BatchJobPhase') THEN
+    CREATE TYPE "BatchJobPhase" AS ENUM ('SUMMARY', 'EMBEDDING');
+  END IF;
+END
+$$;
 
 -- CreateEnum
-CREATE TYPE "BatchJobStatus" AS ENUM ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'EXPIRED');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'BatchJobStatus') THEN
+    CREATE TYPE "BatchJobStatus" AS ENUM ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'EXPIRED');
+  END IF;
+END
+$$;
 
 -- AlterTable
 ALTER TABLE "product_embeddings" ALTER COLUMN "embedding_vector" SET NOT NULL;
 
 -- CreateTable
-CREATE TABLE "embedding_batch_jobs" (
+CREATE TABLE IF NOT EXISTS "embedding_batch_jobs" (
     "id" TEXT NOT NULL,
     "phase" "BatchJobPhase" NOT NULL,
     "status" "BatchJobStatus" NOT NULL DEFAULT 'PENDING',
@@ -33,7 +45,7 @@ CREATE TABLE "embedding_batch_jobs" (
 );
 
 -- CreateIndex
-CREATE INDEX "embedding_batch_jobs_status_phase_idx" ON "embedding_batch_jobs"("status", "phase");
+CREATE INDEX IF NOT EXISTS "embedding_batch_jobs_status_phase_idx" ON "embedding_batch_jobs"("status", "phase");
 
 -- CreateIndex
-CREATE INDEX "embedding_batch_jobs_created_at_idx" ON "embedding_batch_jobs"("created_at");
+CREATE INDEX IF NOT EXISTS "embedding_batch_jobs_created_at_idx" ON "embedding_batch_jobs"("created_at");

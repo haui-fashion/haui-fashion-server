@@ -72,7 +72,7 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
     query: QueryProductDto,
     options?: { includeInactive?: boolean }
   ): Promise<PaginatedData<Product>> {
-    const { pagination, sort, filter, search } = query;
+    const { pagination, sort, filter, search, categorySlug } = query;
     const page = pagination?.page ?? 1;
     const limit = pagination?.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -90,6 +90,19 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
         { brand: { contains: search, mode: 'insensitive' } },
         { descriptionHtml: { contains: search, mode: 'insensitive' } }
       ];
+    }
+
+    if (categorySlug) {
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+
+      where.AND = [
+        ...existingAnd,
+        { category: { slug: categorySlug } }
+      ] as Prisma.ProductWhereInput[];
     }
 
     if (filter && filter.length > 0) {

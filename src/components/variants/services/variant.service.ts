@@ -59,6 +59,7 @@ export class VariantService {
     const data: Prisma.VariantCreateInput = {
       size: dto.size,
       color: dto.color,
+      hexColor: dto.hexColor,
       sku: dto.sku,
       price: dto.price,
       stock: dto.stock ?? 0,
@@ -94,6 +95,7 @@ export class VariantService {
     const data: Prisma.VariantUpdateInput = {
       size: dto.size,
       color: dto.color,
+      hexColor: dto.hexColor,
       stock: dto.stock,
       ...(dto.price !== undefined && { price: dto.price })
     };
@@ -249,7 +251,7 @@ export class VariantService {
       return;
     }
 
-    const uniqueIds = [...new Set(fileIds)];
+    const uniqueIds = Array.from(new Set(fileIds));
     const existing = await this.prisma.file.findMany({
       where: { id: { in: uniqueIds } },
       select: { id: true }

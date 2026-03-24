@@ -1,0 +1,4 @@
+export const PRODUCT_EMBEDDING_LOCAL_DEFAULT_LIMIT = 500;
+export const PRODUCT_EMBEDDING_LOCAL_DEFAULT_BATCH_SIZE = 20;
+export const PRODUCT_EMBEDDING_LOCAL_MODEL_NAME =
+  'intfloat/multilingual-e5-base';

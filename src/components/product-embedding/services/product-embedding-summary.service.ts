@@ -3,6 +3,9 @@ import { ProductSummary } from '@components/product-embedding/entities/product-s
 import { GeminiGenerationService } from '@core/modules/gemini';
 import { Injectable, Logger } from '@nestjs/common';
 
+/**
+ * @deprecated
+ */
 @Injectable()
 export class ProductEmbeddingSummaryService {
   private readonly logger = new Logger(ProductEmbeddingSummaryService.name);

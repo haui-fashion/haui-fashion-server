@@ -14,7 +14,13 @@ import {
   Injectable,
   UnauthorizedException
 } from '@nestjs/common';
-import { LoginDto, RefreshTokenDto, RegisterDto } from '../dtos';
+import {
+  LoginDto,
+  RefreshTokenDto,
+  RegisterDto,
+  UpdateProfileDto,
+  ChangePasswordDto
+} from '../dtos';
 
 @Injectable()
 export class AuthService {
@@ -113,5 +119,21 @@ export class AuthService {
     );
 
     return user;
+  }
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    return this.userService.update(userId, dto);
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.userService.findById(userId);
+    const isPasswordValid = await UserService.isPasswordMatch(
+      dto.oldPassword,
+      user.password
+    );
+    if (!isPasswordValid) {
+      throw new ConflictException('Mật khẩu hiện tại không chính xác');
+    }
+
+    return this.userService.update(userId, { password: dto.newPassword });
   }
 }

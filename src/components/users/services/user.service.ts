@@ -46,7 +46,8 @@ export class UserService {
     const hashedPassword = await bcrypt.hash(data.password, 10);
     return this.userRepository.createUser({
       ...data,
-      password: hashedPassword
+      password: hashedPassword,
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined
     });
   }
 
@@ -55,7 +56,11 @@ export class UserService {
     if (data.password) {
       data.password = await bcrypt.hash(data.password, 10);
     }
-    const updatedUser = await this.userRepository.updateUser(id, data);
+    const updateData: any = { ...data };
+    if (data.dateOfBirth) {
+      updateData.dateOfBirth = new Date(data.dateOfBirth);
+    }
+    const updatedUser = await this.userRepository.updateUser(id, updateData);
     await this.appCacheService.del(AppCacheKeys.userInfo(id));
     return updatedUser;
   }

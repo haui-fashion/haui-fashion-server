@@ -29,7 +29,8 @@ export class ProductDescriptionGenerationService {
       'Bạn là chuyên gia viết mô tả sản phẩm thời trang e-commerce. ' +
       `Hãy phân tích dữ liệu sản phẩm và ảnh (nếu có), rồi tạo JSON đúng schema bằng ngôn ngữ Việt Nam. ` +
       'Yêu cầu nội dung ngắn gọn, giàu thông tin, phù hợp đăng bán trực tuyến và KHÔNG bịa đặt quá mức. ' +
-      'Trường bắt buộc cần rõ ràng gồm productName, shortPreview và preserver. ' +
+      'Trường bắt buộc cần rõ ràng gồm productName, shortPreview, shortDescription và preserver. ' +
+      'shortDescription phải là đoạn mô tả semantic, gom các trường chính của sản phẩm (danh mục, giới tính, phong cách, chất liệu, form, mùa, thương hiệu) và ngữ cảnh sử dụng phù hợp. ' +
       'preserver phải là danh sách hướng dẫn bảo quản cụ thể cho khách hàng.' +
       `\n\nDữ liệu sản phẩm:\n${JSON.stringify(productContext, null, 2)}`;
 
@@ -77,7 +78,13 @@ export class ProductDescriptionGenerationService {
       sizeAndFit: this.pickStringArray(parsed.sizeAndFit),
       stylingSuggestions: this.pickStringArray(parsed.stylingSuggestions),
       packageIncludes: this.pickStringArray(parsed.packageIncludes),
-      seoKeywords: this.pickStringArray(parsed.seoKeywords)
+      seoKeywords: this.pickStringArray(parsed.seoKeywords),
+      shortDescription: this.buildSemanticShortDescription(
+        input,
+        this.pickString(parsed.shortDescription, ''),
+        this.pickString(parsed.shortPreview, ''),
+        this.pickStringArray(parsed.keyFeatures)
+      )
     };
 
     if (!result.shortPreview) {
@@ -120,5 +127,36 @@ export class ProductDescriptionGenerationService {
       .filter((item): item is string => typeof item === 'string')
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
+  }
+
+  private buildSemanticShortDescription(
+    input: GenerateProductDescriptionDto,
+    generatedShortDescription: string,
+    shortPreview: string,
+    keyFeatures: string[]
+  ): string {
+    if (generatedShortDescription) {
+      return generatedShortDescription;
+    }
+
+    const semanticParts = [
+      input.categoryName
+        ? `Danh mục ${input.categoryName}`
+        : 'Danh mục chưa xác định',
+      input.gender ? `phù hợp ${input.gender}` : null,
+      input.styleTags?.length
+        ? `phong cách ${input.styleTags.join(', ')}`
+        : null,
+      input.material ? `chất liệu ${input.material}` : null,
+      input.fit ? `form ${input.fit}` : null,
+      input.season ? `dùng tốt mùa ${input.season}` : null,
+      input.brand ? `thương hiệu ${input.brand}` : null,
+      keyFeatures.length > 0
+        ? `điểm nhấn ${keyFeatures.slice(0, 3).join(', ')}`
+        : null,
+      shortPreview || null
+    ].filter((part): part is string => Boolean(part));
+
+    return semanticParts.join('. ');
   }
 }

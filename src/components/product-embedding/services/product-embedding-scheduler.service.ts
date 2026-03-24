@@ -13,14 +13,8 @@ export class ProductEmbeddingSchedulerService {
   @Cron('0 0 * * *', {
     timeZone: process.env.APP_TIMEZONE || 'Asia/Ho_Chi_Minh'
   })
-  async startNightlyPipeline() {
+  async startEmbeddingPipeline() {
     this.logger.log('Run scheduled product embedding pipeline at midnight');
-    await this.orchestratorService.startPipeline();
-  }
-
-  @Cron('*/5 * * * *')
-  async pollBatchJobs() {
-    this.logger.debug('Polling active embedding batch jobs');
-    await this.orchestratorService.checkAndAdvance();
+    await this.orchestratorService.startEmbeddingPipeline();
   }
 }

@@ -11,6 +11,9 @@ import { ConfigService } from '@nestjs/config';
 import { EmbeddingSyncStatus, Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 
+/**
+ * @deprecated Use ProductEmbeddingLocalService for the default embedding sync pipeline.
+ */
 @Injectable()
 export class ProductEmbeddingService {
   private readonly logger = new Logger(ProductEmbeddingService.name);
@@ -44,6 +47,7 @@ export class ProductEmbeddingService {
         id: true,
         name: true,
         descriptionHtml: true,
+        shortDescription: true,
         brand: true,
         gender: true,
         styleTags: true,
@@ -75,6 +79,7 @@ export class ProductEmbeddingService {
       fit: product.fit || 'Chưa xác định',
       season: product.season || 'Mọi mùa',
       descriptionHtml: this.normalizeDescription(product.descriptionHtml),
+      shortDescription: this.normalizeDescription(product.shortDescription),
       brand: product.brand,
       isActive: product.isActive
     };

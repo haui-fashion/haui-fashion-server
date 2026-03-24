@@ -45,6 +45,13 @@ export default () => ({
   },
   embedding: {
     embeddingTaskType:
-      process.env.PRODUCT_EMBEDDING_TASK_TYPE || 'RETRIEVAL_DOCUMENT'
+      process.env.PRODUCT_EMBEDDING_TASK_TYPE || 'RETRIEVAL_DOCUMENT',
+    serviceUrl: process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000',
+    timeoutMs: parseInt(process.env.EMBEDDING_SERVICE_TIMEOUT_MS || '30000', 10)
+  },
+  httpClient: {
+    timeoutMs: parseInt(process.env.HTTP_CLIENT_TIMEOUT_MS || '5000', 10),
+    maxRedirects: parseInt(process.env.HTTP_CLIENT_MAX_REDIRECTS || '5', 10),
+    maxSockets: parseInt(process.env.HTTP_CLIENT_MAX_SOCKETS || '50', 10)
   }
 });

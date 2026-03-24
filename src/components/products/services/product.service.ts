@@ -79,6 +79,7 @@ export class ProductService {
       name: dto.name,
       description: descriptionJson,
       descriptionHtml,
+      shortDescription: dto.shortDescription,
       brand: dto.brand,
       gender: dto.gender,
       styleTags: dto.styleTags,
@@ -126,6 +127,7 @@ export class ProductService {
       name: dto.name,
       description: descriptionJson,
       descriptionHtml,
+      shortDescription: dto.shortDescription,
       brand: dto.brand,
       gender: dto.gender,
       styleTags: dto.styleTags,
@@ -312,7 +314,7 @@ export class ProductService {
       return;
     }
 
-    const uniqueIds = [...new Set(fileIds)];
+    const uniqueIds = Array.from(new Set(fileIds));
     const existingIds =
       await this.productRepository.findExistingFileIds(uniqueIds);
 
@@ -409,6 +411,7 @@ export class ProductService {
       dto.name !== undefined ||
       dto.slug !== undefined ||
       dto.description !== undefined ||
+      dto.shortDescription !== undefined ||
       dto.brand !== undefined ||
       dto.gender !== undefined ||
       dto.styleTags !== undefined ||

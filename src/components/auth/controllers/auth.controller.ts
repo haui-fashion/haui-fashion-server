@@ -3,9 +3,15 @@ import {
   CurrentUserDto
 } from '@core/utilities/decorators/current-user.decorator';
 import { Public } from '@core/utilities/decorators/public.decorator';
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Patch } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { LoginDto, RefreshTokenDto, RegisterDto } from '../dtos';
+import {
+  LoginDto,
+  RefreshTokenDto,
+  RegisterDto,
+  UpdateProfileDto,
+  ChangePasswordDto
+} from '../dtos';
 import { AuthService } from '../services/auth.service';
 
 @ApiTags('Auth')
@@ -35,5 +41,22 @@ export class AuthController {
   @ApiBearerAuth()
   async getMe(@CurrentUser() user: CurrentUserDto) {
     return this.authService.getMe(user.userId);
+  }
+  @Patch('profile')
+  @ApiBearerAuth()
+  async updateProfile(
+    @CurrentUser() user: CurrentUserDto,
+    @Body() dto: UpdateProfileDto
+  ) {
+    return this.authService.updateProfile(user.userId, dto);
+  }
+
+  @Patch('change-password')
+  @ApiBearerAuth()
+  async changePassword(
+    @CurrentUser() user: CurrentUserDto,
+    @Body() dto: ChangePasswordDto
+  ) {
+    return this.authService.changePassword(user.userId, dto);
   }
 }
