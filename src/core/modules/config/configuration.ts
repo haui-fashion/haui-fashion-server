@@ -23,11 +23,8 @@ export default () => ({
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '604800'
   },
   mail: {
-    host: process.env.MAIL_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.MAIL_PORT || '587', 10),
-    user: process.env.MAIL_USER,
-    password: process.env.MAIL_PASSWORD,
-    from: process.env.MAIL_FROM || '"No Reply" <noreply@example.com>'
+    resendApiKey: process.env.RESEND_API_KEY,
+    from: process.env.MAIL_FROM || '"No Reply" <noreply@hauifasion.com>'
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
