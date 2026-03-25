@@ -69,21 +69,34 @@ GROUP BY v."product_id", po."id", trim(v."size")
 ON CONFLICT ("id") DO NOTHING;
 
 -- Preserve existing hex colors when available.
-UPDATE "product_option_values" pov
-SET "hex_color" = src."hex_color"
-FROM (
-  SELECT DISTINCT ON (v."product_id", trim(v."color"))
-    v."product_id",
-    trim(v."color") AS "color",
-    v."hex_color"
-  FROM "variants" v
-  WHERE v."hex_color" IS NOT NULL
-) src
-JOIN "product_options" po
-  ON po."product_id" = src."product_id" AND po."name" = 'COLOR'
-WHERE pov."option_id" = po."id"
-  AND pov."value" = src."color"
-  AND pov."hex_color" IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'variants'
+      AND column_name = 'hex_color'
+  ) THEN
+    EXECUTE $SQL$
+      UPDATE "product_option_values" pov
+      SET "hex_color" = src."hex_color"
+      FROM (
+        SELECT DISTINCT ON (v."product_id", trim(v."color"))
+          v."product_id",
+          trim(v."color") AS "color",
+          v."hex_color"
+        FROM "variants" v
+        WHERE v."hex_color" IS NOT NULL
+      ) src
+      JOIN "product_options" po
+        ON po."product_id" = src."product_id" AND po."name" = 'COLOR'
+      WHERE pov."option_id" = po."id"
+        AND pov."value" = src."color"
+        AND pov."hex_color" IS NULL
+    $SQL$;
+  END IF;
+END $$;
 
 -- Link each variant to exactly one color value and one size value.
 UPDATE "variants" v
