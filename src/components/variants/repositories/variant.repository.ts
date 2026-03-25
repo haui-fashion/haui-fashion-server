@@ -11,16 +11,38 @@ import { Prisma, Variant } from '@prisma/client';
 
 type VariantWithProduct = Prisma.VariantGetPayload<{
   include: {
-    product: true;
+    product: {
+      include: {
+        images: {
+          include: {
+            file: true;
+            optionValue: true;
+          };
+          orderBy: {
+            position: 'asc';
+          };
+        };
+      };
+    };
+    colorOptionValue: true;
+    sizeOptionValue: true;
   };
 }>;
 
 const variantInclude = {
-  product: true,
-  images: {
-    include: { file: true },
-    orderBy: { position: 'asc' as const }
-  }
+  product: {
+    include: {
+      images: {
+        include: {
+          file: true,
+          optionValue: true
+        },
+        orderBy: { position: 'asc' as const }
+      }
+    }
+  },
+  colorOptionValue: true,
+  sizeOptionValue: true
 } as const;
 
 @Injectable()
@@ -53,8 +75,20 @@ export class VariantRepository extends BaseRepository<VariantEntity, Variant> {
     if (search) {
       where.OR = [
         { sku: { contains: search, mode: 'insensitive' } },
-        { size: { contains: search, mode: 'insensitive' } },
-        { color: { contains: search, mode: 'insensitive' } }
+        {
+          sizeOptionValue: {
+            is: {
+              value: { contains: search, mode: 'insensitive' }
+            }
+          }
+        },
+        {
+          colorOptionValue: {
+            is: {
+              value: { contains: search, mode: 'insensitive' }
+            }
+          }
+        }
       ];
     }
 

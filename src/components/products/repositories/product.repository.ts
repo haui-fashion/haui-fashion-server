@@ -16,12 +16,17 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
     images: {
       include: {
         file: true;
+        optionValue: true;
       };
       orderBy: {
         position: 'asc';
       };
     };
     variants: {
+      include: {
+        colorOptionValue: true;
+        sizeOptionValue: true;
+      };
       orderBy: {
         createdAt: 'desc';
       };
@@ -39,7 +44,8 @@ const productInclude = {
   category: true,
   images: {
     include: {
-      file: true
+      file: true,
+      optionValue: true
     },
     orderBy: {
       position: 'asc'
@@ -50,11 +56,8 @@ const productInclude = {
       createdAt: 'desc'
     },
     include: {
-      images: {
-        include: {
-          file: true
-        }
-      }
+      colorOptionValue: true,
+      sizeOptionValue: true
     }
   }
 } as const;
@@ -227,13 +230,17 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
   ): Promise<ProductWithRelations> {
     await this.prisma.$transaction(async (tx) => {
       await tx.productImage.deleteMany({
-        where: { productId }
+        where: {
+          productId,
+          optionValueId: null
+        }
       });
 
       if (images.length > 0) {
         await tx.productImage.createMany({
           data: images.map((image) => ({
             productId,
+            optionValueId: null,
             fileId: image.fileId,
             isPrimary: image.isPrimary,
             position: image.position

@@ -16,6 +16,10 @@ export class VariantEntity extends BaseEntity {
   color: string;
 
   @Expose()
+  @ApiProperty({ required: false })
+  hexColor?: string;
+
+  @Expose()
   @ApiProperty()
   sku: string;
 

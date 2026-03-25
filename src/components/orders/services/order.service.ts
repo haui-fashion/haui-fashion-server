@@ -69,7 +69,9 @@ export class OrderService {
           include: {
             variant: {
               include: {
-                product: true
+                product: true,
+                colorOptionValue: true,
+                sizeOptionValue: true
               }
             }
           }
@@ -160,8 +162,8 @@ export class OrderService {
                     productName: item.variant.product.name,
                     variantId: item.variant.id,
                     sku: item.variant.sku,
-                    size: item.variant.size,
-                    color: item.variant.color,
+                    size: item.variant.sizeOptionValue.value,
+                    color: item.variant.colorOptionValue.value,
                     unitPrice: new Prisma.Decimal(item.variant.price).toFixed(2)
                   }
                 }))

@@ -30,9 +30,14 @@ export class ProductService {
   ) {}
 
   async findAll(query: QueryProductDto, userRole?: Role) {
-    return this.productRepository.findAll(query, {
+    const result = await this.productRepository.findAll(query, {
       includeInactive: userRole === Role.ADMIN
     });
+
+    return {
+      ...result,
+      items: result.items.map((item) => this.toProductResponse(item as any))
+    };
   }
 
   async findById(id: string, userRole?: Role) {
@@ -42,7 +47,7 @@ export class ProductService {
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với id ${id}`);
     }
-    return product;
+    return this.toProductResponse(product as any);
   }
 
   async findBySlug(slug: string, userRole?: Role) {
@@ -52,7 +57,7 @@ export class ProductService {
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với slug "${slug}"`);
     }
-    return product;
+    return this.toProductResponse(product as any);
   }
 
   async create(dto: CreateProductDto) {
@@ -106,7 +111,8 @@ export class ProductService {
     };
 
     try {
-      return await this.productRepository.createProduct(createData);
+      const created = await this.productRepository.createProduct(createData);
+      return this.toProductResponse(created as any);
     } catch (error) {
       if (this.isUniqueConstraintError(error, 'slug')) {
         throw new ConflictException(`Sản phẩm với slug "${slug}" đã tồn tại`);
@@ -175,13 +181,17 @@ export class ProductService {
           });
 
           await tx.productImage.deleteMany({
-            where: { productId: id }
+            where: {
+              productId: id,
+              optionValueId: null
+            }
           });
 
           if (normalizedImages.length > 0) {
             await tx.productImage.createMany({
               data: normalizedImages.map((image) => ({
                 productId: id,
+                optionValueId: null,
                 fileId: image.fileId,
                 isPrimary: image.isPrimary,
                 position: image.position
@@ -236,11 +246,13 @@ export class ProductService {
   async toggleActive(id: string) {
     const product = await this.findById(id, Role.ADMIN);
 
-    return await this.productRepository.updateProduct(id, {
+    const updated = await this.productRepository.updateProduct(id, {
       isActive: !product.isActive,
       embeddingDirty: true,
       embeddingSyncStatus: EmbeddingSyncStatus.PENDING
     });
+
+    return this.toProductResponse(updated as any);
   }
 
   async softDeleteStock(id: string) {
@@ -421,6 +433,35 @@ export class ProductService {
       dto.categoryId !== undefined ||
       dto.isActive !== undefined
     );
+  }
+
+  private toProductResponse(product: any) {
+    const fallbackImages =
+      product.images?.filter((image: any) => !image.optionValueId) ?? [];
+
+    const variants =
+      product.variants?.map((variant: any) => {
+        const colorSpecificImages =
+          product.images?.filter(
+            (image: any) => image.optionValueId === variant.colorOptionValueId
+          ) ?? [];
+
+        return {
+          ...variant,
+          color: variant.colorOptionValue?.value,
+          size: variant.sizeOptionValue?.value,
+          hexColor: variant.colorOptionValue?.hexColor ?? null,
+          images:
+            colorSpecificImages.length > 0
+              ? colorSpecificImages
+              : fallbackImages
+        };
+      }) ?? [];
+
+    return {
+      ...product,
+      variants
+    };
   }
 
   private buildCommonDescriptionTiptap(
