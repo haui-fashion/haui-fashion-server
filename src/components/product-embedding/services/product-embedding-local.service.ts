@@ -217,6 +217,20 @@ export class ProductEmbeddingLocalService {
           select: {
             name: true
           }
+        },
+        variants: {
+          select: {
+            colorOptionValue: {
+              select: {
+                value: true
+              }
+            },
+            sizeOptionValue: {
+              select: {
+                value: true
+              }
+            }
+          }
         }
       }
     }) as Promise<ProductForEmbedding[]>;
@@ -225,6 +239,14 @@ export class ProductEmbeddingLocalService {
   private buildPromptPayload(
     product: ProductForEmbedding
   ): LocalEmbeddingPromptPayload {
+    const colors = this.normalizeVariantValues(
+      product.variants,
+      'colorOptionValue'
+    );
+    const sizes = this.normalizeVariantValues(
+      product.variants,
+      'sizeOptionValue'
+    );
     const styleTags = this.normalizeStyleTags(product.styleTags);
     const shortDescription = this.normalizeDescription(
       product.shortDescription
@@ -237,6 +259,8 @@ export class ProductEmbeddingLocalService {
       name: product.name,
       categoryName: product.category?.name || 'Không xác định',
       gender: product.gender || 'UNISEX',
+      colors,
+      sizes,
       styleTags,
       material: product.material || 'Chưa xác định',
       fit: product.fit || 'Mọi form',
@@ -247,6 +271,8 @@ export class ProductEmbeddingLocalService {
       semanticContext: this.buildSemanticContext({
         categoryName: product.category?.name,
         gender: product.gender,
+        colors,
+        sizes,
         styleTags,
         material: product.material,
         fit: product.fit,
@@ -257,6 +283,12 @@ export class ProductEmbeddingLocalService {
   }
 
   private buildEmbeddingInput(payload: LocalEmbeddingPromptPayload): string {
+    const colorLabel = payload.colors.length
+      ? payload.colors.join(', ')
+      : 'Không xác định';
+    const sizeLabel = payload.sizes.length
+      ? payload.sizes.join(', ')
+      : 'Không xác định';
     const styleLabel = payload.styleTags.length
       ? payload.styleTags.join(', ')
       : 'Không xác định';
@@ -265,6 +297,8 @@ export class ProductEmbeddingLocalService {
       `Sản phẩm: ${payload.name}`,
       `Danh mục: ${payload.categoryName}`,
       `Giới tính: ${payload.gender}`,
+      `Màu: ${colorLabel}`,
+      `Size: ${sizeLabel}`,
       `Phong cách: ${styleLabel}`,
       `Chất liệu: ${payload.material}`,
       `Form: ${payload.fit}`,
@@ -393,6 +427,8 @@ export class ProductEmbeddingLocalService {
     const parts = [
       input.categoryName ? `thuộc danh mục ${input.categoryName}` : null,
       input.gender ? `dành cho ${input.gender}` : null,
+      input.colors.length > 0 ? `màu sắc ${input.colors.join(', ')}` : null,
+      input.sizes.length > 0 ? `size ${input.sizes.join(', ')}` : null,
       input.styleTags.length > 0
         ? `phong cách ${input.styleTags.join(', ')}`
         : null,
@@ -414,6 +450,19 @@ export class ProductEmbeddingLocalService {
       .filter((item): item is string => typeof item === 'string')
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
+  }
+
+  private normalizeVariantValues(
+    variants: ProductForEmbedding['variants'],
+    key: 'colorOptionValue' | 'sizeOptionValue'
+  ): string[] {
+    return [
+      ...new Set(
+        variants
+          .map((variant) => variant[key]?.value?.trim())
+          .filter((value): value is string => Boolean(value))
+      )
+    ];
   }
 
   private normalizeDescription(value: string | null): string {

@@ -60,6 +60,20 @@ export class ProductEmbeddingService {
           select: {
             name: true
           }
+        },
+        variants: {
+          select: {
+            colorOptionValue: {
+              select: {
+                value: true
+              }
+            },
+            sizeOptionValue: {
+              select: {
+                value: true
+              }
+            }
+          }
         }
       }
     }) as Promise<ProductForEmbedding[]>;
@@ -70,10 +84,21 @@ export class ProductEmbeddingService {
   }
 
   public buildPromptPayload(product: ProductForEmbedding) {
+    const colors = this.normalizeVariantValues(
+      product.variants,
+      'colorOptionValue'
+    );
+    const sizes = this.normalizeVariantValues(
+      product.variants,
+      'sizeOptionValue'
+    );
+
     return {
       name: product.name,
       categoryName: product.category?.name || 'Không xác định',
       gender: product.gender || 'UNISEX',
+      colors,
+      sizes,
       styleTags: this.normalizeStyleTags(product.styleTags),
       material: product.material || 'Chưa xác định',
       fit: product.fit || 'Chưa xác định',
@@ -95,6 +120,8 @@ export class ProductEmbeddingService {
       dto.name = payload.name;
       dto.categoryName = payload.categoryName;
       dto.gender = payload.gender;
+      dto.colors = payload.colors;
+      dto.sizes = payload.sizes;
       dto.styleTags = payload.styleTags;
       dto.material = payload.material;
       dto.fit = payload.fit;
@@ -283,6 +310,12 @@ export class ProductEmbeddingService {
     payload: ReturnType<typeof this.buildPromptPayload>,
     summary: ProductSummary
   ): string {
+    const colors = payload.colors.length
+      ? payload.colors.join(', ')
+      : 'Không xác định';
+    const sizes = payload.sizes.length
+      ? payload.sizes.join(', ')
+      : 'Không xác định';
     const styleTags = payload.styleTags.length
       ? payload.styleTags.join(', ')
       : 'Không xác định';
@@ -302,15 +335,19 @@ export class ProductEmbeddingService {
 
     Danh mục: thời trang, ${payload.categoryName}.
     Giới tính: ${payload.gender}.
+    Màu sắc: ${colors}.
+    Kích cỡ: ${sizes}.
 
     Thuộc tính:
+    - Màu: ${colors}
+    - Size: ${sizes}
     - Phong cách: ${styleTags}
     - Chất liệu: ${payload.material}
     - Form dáng: ${payload.fit}
     - Mùa: ${payload.season}
 
     Mô tả ngữ nghĩa:
-    Đây là một ${payload.categoryName} dành cho ${payload.gender}, phù hợp với phong cách ${styleTags}.
+    Đây là một ${payload.categoryName} dành cho ${payload.gender}, có các màu ${colors} và size ${sizes}, phù hợp với phong cách ${styleTags}.
     Sản phẩm được làm từ ${payload.material}, form ${payload.fit}, thích hợp sử dụng trong mùa ${payload.season}.
 
     Mô tả ngắn:
@@ -338,6 +375,19 @@ export class ProductEmbeddingService {
       .filter((item): item is string => typeof item === 'string')
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
+  }
+
+  private normalizeVariantValues(
+    variants: ProductForEmbedding['variants'],
+    key: 'colorOptionValue' | 'sizeOptionValue'
+  ): string[] {
+    return [
+      ...new Set(
+        variants
+          .map((variant) => variant[key]?.value?.trim())
+          .filter((value): value is string => Boolean(value))
+      )
+    ];
   }
 
   private normalizeDescription(value: string | null): string {

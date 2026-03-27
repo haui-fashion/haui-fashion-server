@@ -40,11 +40,40 @@ export default () => ({
       generation: process.env.GEMINI_GENERATION_MODEL || 'gemini-2.5-flash'
     }
   },
+  shipping: {
+    ghn: {
+      apiToken: process.env.GHN_API_TOKEN,
+      baseUrl: 'https://dev-online-gateway.ghn.vn/shiip/',
+      timeoutMs: parseInt(process.env.GHN_API_TIMEOUT_MS || '5000', 10),
+      shopId: process.env.GHN_SHOP_ID
+    }
+  },
+  ollama: {
+    baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+    timeoutMs: parseInt(process.env.OLLAMA_TIMEOUT_MS || '20000', 10),
+    models: {
+      router: process.env.OLLAMA_ROUTER_MODEL || 'qwen2.5:3b'
+    }
+  },
   embedding: {
     embeddingTaskType:
       process.env.PRODUCT_EMBEDDING_TASK_TYPE || 'RETRIEVAL_DOCUMENT',
     serviceUrl: process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000',
-    timeoutMs: parseInt(process.env.EMBEDDING_SERVICE_TIMEOUT_MS || '30000', 10)
+    timeoutMs: parseInt(
+      process.env.EMBEDDING_SERVICE_TIMEOUT_MS || '30000',
+      10
+    ),
+    search: {
+      semanticWeight: parseFloat(
+        process.env.PRODUCT_SEARCH_VECTOR_SEMANTIC_WEIGHT || '0.75'
+      ),
+      lexicalWeight: parseFloat(
+        process.env.PRODUCT_SEARCH_VECTOR_LEXICAL_WEIGHT || '0.25'
+      ),
+      minSemanticScore: parseFloat(
+        process.env.PRODUCT_SEARCH_VECTOR_MIN_SEMANTIC_SCORE || '0.2'
+      )
+    }
   },
   httpClient: {
     timeoutMs: parseInt(process.env.HTTP_CLIENT_TIMEOUT_MS || '5000', 10),

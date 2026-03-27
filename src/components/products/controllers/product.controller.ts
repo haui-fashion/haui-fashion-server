@@ -1,10 +1,12 @@
 import { BatchJobOrchestratorService } from '@components/product-embedding/services/batch-job-orchestrator.service';
+import { AutocompleteProductDto } from '@components/products/dtos/autocomplete-product.dto';
 import { CreateProductDto } from '@components/products/dtos/create-product.dto';
 import { GenerateProductDescriptionDto } from '@components/products/dtos/generate-product-description.dto';
 import { QueryProductDto } from '@components/products/dtos/query-product.dto';
 import { SyncProductEmbeddingDto } from '@components/products/dtos/sync-product-embedding-by-id.dto';
 import { SyncProductEmbeddingsDto } from '@components/products/dtos/sync-product-embeddings.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
+import { UpsertVariantGroupDto } from '@components/products/dtos/upsert-variant-group.dto';
 import { ProductService } from '@components/products/services/product.service';
 import { Public } from '@core/utilities/decorators';
 import { Roles } from '@core/utilities/decorators/roles.decorator';
@@ -106,6 +108,13 @@ export class ProductController {
     return this.productService.findBySlug(slug);
   }
 
+  @Get('autocomplete')
+  @Public()
+  @ApiOperation({ summary: 'Public product search auto-completion (pg_trgm)' })
+  autocomplete(@Query() query: AutocompleteProductDto) {
+    return this.productService.autocomplete(query.q, query.limit ?? 8);
+  }
+
   @Get('admin')
   @ApiBearerAuth()
   @Roles(Role.ADMIN)
@@ -143,6 +152,33 @@ export class ProductController {
   @ApiOperation({ summary: 'Update a product' })
   update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.productService.update(id, dto);
+  }
+
+  @Post(':id/variant-groups')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Create a variant group by color (images + variants)'
+  })
+  createVariantGroup(
+    @Param('id') id: string,
+    @Body() dto: UpsertVariantGroupDto
+  ) {
+    return this.productService.createVariantGroup(id, dto);
+  }
+
+  @Patch(':id/variant-groups/:colorOptionValueId')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Update a variant group by color option value ID'
+  })
+  updateVariantGroup(
+    @Param('id') id: string,
+    @Param('colorOptionValueId') colorOptionValueId: string,
+    @Body() dto: UpsertVariantGroupDto
+  ) {
+    return this.productService.updateVariantGroup(id, colorOptionValueId, dto);
   }
 
   @Patch(':id/toggle-active')

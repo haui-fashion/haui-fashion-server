@@ -12,6 +12,14 @@ export class SummaryProductInformationDto {
 
   @IsArray()
   @IsString({ each: true })
+  colors: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  sizes: string[];
+
+  @IsArray()
+  @IsString({ each: true })
   styleTags: string[];
 
   @IsString()

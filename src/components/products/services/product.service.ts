@@ -5,6 +5,10 @@ import {
 import { GenerateProductDescriptionDto } from '@components/products/dtos/generate-product-description.dto';
 import { QueryProductDto } from '@components/products/dtos/query-product.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
+import {
+  UpsertVariantGroupDto,
+  VariantGroupVariantInputDto
+} from '@components/products/dtos/upsert-variant-group.dto';
 import { GeneratedProductDescription } from '@components/products/entities/generated-product-description.entity';
 import { NormalizedImage } from '@components/products/entities/normalized-image.entity';
 import { ProductRepository } from '@components/products/repositories/product.repository';
@@ -18,7 +22,13 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import { EmbeddingSyncStatus, Prisma, Product, Role } from '@prisma/client';
+import {
+  EmbeddingSyncStatus,
+  Prisma,
+  Product,
+  ProductOptionType,
+  Role
+} from '@prisma/client';
 
 @Injectable()
 export class ProductService {
@@ -36,8 +46,12 @@ export class ProductService {
 
     return {
       ...result,
-      items: result.items.map((item) => this.toProductResponse(item as any))
+      items: result.items.map((item) => this.toProductListResponse(item as any))
     };
+  }
+
+  autocomplete(keyword: string, limit = 8) {
+    return this.productRepository.autocomplete(keyword, limit);
   }
 
   async findById(id: string, userRole?: Role) {
@@ -225,6 +239,177 @@ export class ProductService {
     return this.findById(id, Role.ADMIN);
   }
 
+  async createVariantGroup(productId: string, dto: UpsertVariantGroupDto) {
+    await this.findById(productId, Role.ADMIN);
+
+    const normalizedImages = this.normalizeImages(dto.images);
+    await this.assertFilesExist(normalizedImages.map((image) => image.fileId));
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const colorOptionValue = await this.findOrCreateOptionValue(tx, {
+          productId,
+          type: ProductOptionType.COLOR,
+          value: dto.color,
+          hexColor: dto.hexColor
+        });
+
+        await this.syncVariantGroup(tx, {
+          productId,
+          colorOptionValueId: colorOptionValue.id,
+          variants: dto.variants
+        });
+
+        if (dto.images !== undefined) {
+          await this.replaceColorImages(tx, {
+            productId,
+            colorOptionValueId: colorOptionValue.id,
+            images: normalizedImages
+          });
+        }
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error, 'sku')) {
+        throw new ConflictException('SKU đã tồn tại, vui lòng dùng SKU khác');
+      }
+
+      if (
+        this.isUniqueConstraintError(
+          error,
+          'variants_product_color_size_unique'
+        )
+      ) {
+        throw new ConflictException(
+          'Có biến thể bị trùng tổ hợp màu và size trong cùng sản phẩm'
+        );
+      }
+
+      throw error;
+    }
+
+    return this.findById(productId, Role.ADMIN);
+  }
+
+  async updateVariantGroup(
+    productId: string,
+    colorOptionValueId: string,
+    dto: UpsertVariantGroupDto
+  ) {
+    await this.findById(productId, Role.ADMIN);
+
+    const existingColorValue = await this.prisma.productOptionValue.findFirst({
+      where: {
+        id: colorOptionValueId,
+        option: {
+          productId,
+          name: ProductOptionType.COLOR
+        }
+      },
+      select: {
+        id: true,
+        value: true
+      }
+    });
+
+    if (!existingColorValue) {
+      throw new NotFoundException(
+        `Không tìm thấy nhóm màu với id ${colorOptionValueId}`
+      );
+    }
+
+    const normalizedImages = this.normalizeImages(dto.images);
+    await this.assertFilesExist(normalizedImages.map((image) => image.fileId));
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (dto.color !== undefined || dto.hexColor !== undefined) {
+          const updateData: Prisma.ProductOptionValueUpdateInput = {};
+
+          if (dto.color !== undefined) {
+            const nextColor = dto.color.trim();
+
+            if (!nextColor) {
+              throw new BadRequestException('Màu sắc không được để trống');
+            }
+
+            const duplicateColor = await tx.productOptionValue.findFirst({
+              where: {
+                id: {
+                  not: colorOptionValueId
+                },
+                option: {
+                  productId,
+                  name: ProductOptionType.COLOR
+                },
+                value: {
+                  equals: nextColor,
+                  mode: 'insensitive'
+                }
+              },
+              select: {
+                id: true
+              }
+            });
+
+            if (duplicateColor) {
+              throw new ConflictException(
+                `Nhóm màu "${nextColor}" đã tồn tại trong sản phẩm`
+              );
+            }
+
+            updateData.value = nextColor;
+          }
+
+          if (dto.hexColor !== undefined) {
+            updateData.hexColor = dto.hexColor;
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            await tx.productOptionValue.update({
+              where: {
+                id: colorOptionValueId
+              },
+              data: updateData
+            });
+          }
+        }
+
+        await this.syncVariantGroup(tx, {
+          productId,
+          colorOptionValueId,
+          variants: dto.variants
+        });
+
+        if (dto.images !== undefined) {
+          await this.replaceColorImages(tx, {
+            productId,
+            colorOptionValueId,
+            images: normalizedImages
+          });
+        }
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error, 'sku')) {
+        throw new ConflictException('SKU đã tồn tại, vui lòng dùng SKU khác');
+      }
+
+      if (
+        this.isUniqueConstraintError(
+          error,
+          'variants_product_color_size_unique'
+        )
+      ) {
+        throw new ConflictException(
+          'Có biến thể bị trùng tổ hợp màu và size trong cùng sản phẩm'
+        );
+      }
+
+      throw error;
+    }
+
+    return this.findById(productId, Role.ADMIN);
+  }
+
   async remove(id: string): Promise<Product> {
     await this.findById(id, Role.ADMIN);
 
@@ -387,6 +572,174 @@ export class ProductService {
     return deduped;
   }
 
+  private async syncVariantGroup(
+    tx: Prisma.TransactionClient,
+    input: {
+      productId: string;
+      colorOptionValueId: string;
+      variants: VariantGroupVariantInputDto[];
+    }
+  ) {
+    const existingVariants = await tx.variant.findMany({
+      where: {
+        productId: input.productId,
+        colorOptionValueId: input.colorOptionValueId
+      },
+      select: {
+        id: true
+      }
+    });
+
+    const existingIdSet = new Set(
+      existingVariants.map((variant) => variant.id)
+    );
+    const keepIds = new Set<string>();
+
+    for (const item of input.variants) {
+      if (item.id && !existingIdSet.has(item.id)) {
+        throw new BadRequestException(
+          `Biến thể ${item.id} không thuộc nhóm màu đang chỉnh sửa`
+        );
+      }
+
+      const sizeOptionValue = await this.findOrCreateOptionValue(tx, {
+        productId: input.productId,
+        type: ProductOptionType.SIZE,
+        value: item.size
+      });
+
+      if (item.id) {
+        await tx.variant.update({
+          where: { id: item.id },
+          data: {
+            sku: item.sku,
+            price: item.price,
+            stock: item.stock ?? 0,
+            sizeOptionValueId: sizeOptionValue.id,
+            colorOptionValueId: input.colorOptionValueId
+          }
+        });
+
+        keepIds.add(item.id);
+        continue;
+      }
+
+      const created = await tx.variant.create({
+        data: {
+          productId: input.productId,
+          sku: item.sku,
+          price: item.price,
+          stock: item.stock ?? 0,
+          sizeOptionValueId: sizeOptionValue.id,
+          colorOptionValueId: input.colorOptionValueId
+        },
+        select: {
+          id: true
+        }
+      });
+
+      keepIds.add(created.id);
+    }
+
+    const toDelete = existingVariants
+      .map((variant) => variant.id)
+      .filter((id) => !keepIds.has(id));
+
+    if (toDelete.length > 0) {
+      await tx.variant.deleteMany({
+        where: {
+          id: {
+            in: toDelete
+          }
+        }
+      });
+    }
+  }
+
+  private async findOrCreateOptionValue(
+    tx: Prisma.TransactionClient,
+    input: {
+      productId: string;
+      type: ProductOptionType;
+      value: string;
+      hexColor?: string;
+    }
+  ) {
+    const trimmedValue = input.value.trim();
+    const normalizedValue =
+      input.type === ProductOptionType.COLOR
+        ? trimmedValue.toLowerCase()
+        : trimmedValue;
+
+    if (!normalizedValue) {
+      throw new BadRequestException('Giá trị option không được để trống');
+    }
+
+    const option = await tx.productOption.upsert({
+      where: {
+        productId_name: {
+          productId: input.productId,
+          name: input.type
+        }
+      },
+      create: {
+        productId: input.productId,
+        name: input.type
+      },
+      update: {}
+    });
+
+    return tx.productOptionValue.upsert({
+      where: {
+        optionId_value: {
+          optionId: option.id,
+          value: normalizedValue
+        }
+      },
+      create: {
+        optionId: option.id,
+        value: normalizedValue,
+        ...(input.type === ProductOptionType.COLOR && input.hexColor
+          ? { hexColor: input.hexColor }
+          : {})
+      },
+      update:
+        input.type === ProductOptionType.COLOR && input.hexColor
+          ? { hexColor: input.hexColor }
+          : {}
+    });
+  }
+
+  private async replaceColorImages(
+    tx: Prisma.TransactionClient,
+    input: {
+      productId: string;
+      colorOptionValueId: string;
+      images: NormalizedImage[];
+    }
+  ) {
+    await tx.productImage.deleteMany({
+      where: {
+        productId: input.productId,
+        optionValueId: input.colorOptionValueId
+      }
+    });
+
+    if (input.images.length === 0) {
+      return;
+    }
+
+    await tx.productImage.createMany({
+      data: input.images.map((image) => ({
+        productId: input.productId,
+        optionValueId: input.colorOptionValueId,
+        fileId: image.fileId,
+        isPrimary: image.isPrimary,
+        position: image.position
+      }))
+    });
+  }
+
   private generateSlug(name: string): string {
     return name
       .normalize('NFD')
@@ -436,31 +789,83 @@ export class ProductService {
   }
 
   private toProductResponse(product: any) {
-    const fallbackImages =
-      product.images?.filter((image: any) => !image.optionValueId) ?? [];
+    const allImages = Array.isArray(product.images) ? product.images : [];
+    const fallbackImages = allImages.filter(
+      (image: any) => !image.optionValueId
+    );
+    const variants = Array.isArray(product.variants) ? product.variants : [];
 
-    const variants =
-      product.variants?.map((variant: any) => {
-        const colorSpecificImages =
-          product.images?.filter(
-            (image: any) => image.optionValueId === variant.colorOptionValueId
-          ) ?? [];
+    const variantGroupsByColor = new Map<string, any>();
 
-        return {
-          ...variant,
-          color: variant.colorOptionValue?.value,
-          size: variant.sizeOptionValue?.value,
+    variants.forEach((variant: any) => {
+      const colorId = variant.colorOptionValueId || '__default__';
+
+      if (!variantGroupsByColor.has(colorId)) {
+        const colorSpecificImages = allImages.filter(
+          (image: any) => image.optionValueId === variant.colorOptionValueId
+        );
+
+        variantGroupsByColor.set(colorId, {
+          colorOptionValueId: variant.colorOptionValueId ?? null,
+          color: variant.colorOptionValue?.value ?? null,
           hexColor: variant.colorOptionValue?.hexColor ?? null,
           images:
             colorSpecificImages.length > 0
               ? colorSpecificImages
-              : fallbackImages
-        };
-      }) ?? [];
+              : fallbackImages,
+          variants: []
+        });
+      }
+
+      const group = variantGroupsByColor.get(colorId);
+      group.variants.push({
+        ...variant,
+        color: variant.colorOptionValue?.value,
+        size: variant.sizeOptionValue?.value,
+        hexColor: variant.colorOptionValue?.hexColor ?? null
+      });
+    });
+
+    const variantGroups = Array.from(variantGroupsByColor.values());
+
+    if (variantGroups.length === 0 && fallbackImages.length > 0) {
+      variantGroups.push({
+        colorOptionValueId: null,
+        color: null,
+        hexColor: null,
+        images: fallbackImages,
+        variants: []
+      });
+    }
 
     return {
       ...product,
-      variants
+      variantGroups
+    };
+  }
+
+  private toProductListResponse(product: any) {
+    const firstImage = product.images?.[0] ?? null;
+
+    return {
+      id: product.id,
+      slug: product.slug,
+      name: product.name,
+      brand: product.brand,
+      gender: product.gender,
+      material: product.material,
+      season: product.season,
+      fit: product.fit,
+      isActive: product.isActive,
+      categoryId: product.categoryId,
+      category: product.category,
+      image: firstImage,
+      numberOfVariants: product.numberOfVariants ?? 0,
+      minVariantPrice: product.minVariantPrice ?? null,
+      maxVariantPrice: product.maxVariantPrice ?? null,
+      totalVariantStock: product.totalVariantStock ?? 0,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt
     };
   }
 

@@ -2,6 +2,8 @@ export class LocalEmbeddingPromptPayload {
   name: string;
   categoryName: string;
   gender: string;
+  colors: string[];
+  sizes: string[];
   styleTags: string[];
   material: string;
   fit: string;

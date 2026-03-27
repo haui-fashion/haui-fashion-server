@@ -1,6 +1,7 @@
-import { Injectable, HttpException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { GetShippingFeeDto } from '@components/shipping/dtos/get-shipping-fee.dto';
 import { HttpClientService } from '@core/modules/http-client/http-client.service';
+import { HttpException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 type GhnResponse<T> = {
   code?: number;
@@ -9,21 +10,27 @@ type GhnResponse<T> = {
 };
 
 @Injectable()
-export class LocationService {
-  private readonly baseUrl =
-    'https://online-gateway.ghn.vn/shiip/public-api/master-data';
+export class ShippingService {
+  private readonly baseUrl: string;
   private readonly token: string;
   private readonly timeoutMs: number;
+  private readonly shopId: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly httpClientService: HttpClientService
   ) {
-    this.token = this.configService.get<string>('GHN_API_TOKEN', 'dummy-token');
+    this.baseUrl =
+      this.configService.get<string>('shipping.ghn.baseUrl') ||
+      'https://dev-online-gateway.ghn.vn/shiip/';
+    this.token =
+      this.configService.get<string>('shipping.ghn.apiToken') || 'dummy';
     this.timeoutMs = this.configService.get<number>(
-      'httpClient.timeoutMs',
+      'shipping.ghn.timeoutMs',
       5000
     );
+    this.shopId =
+      this.configService.get<string>('shipping.ghn.shopId') || 'dummy';
   }
 
   private async fetchGhn<T>(endpoint: string, data?: unknown): Promise<T> {
@@ -35,14 +42,15 @@ export class LocationService {
         ? await this.httpClientService.post<GhnResponse<T>>(url, data, {
             headers: {
               'Content-Type': 'application/json',
-              token: this.token
+              Token: this.token
             },
             timeoutMs: this.timeoutMs
           })
         : await this.httpClientService.get<GhnResponse<T>>(url, undefined, {
             headers: {
               'Content-Type': 'application/json',
-              token: this.token
+              Token: this.token,
+              ShopId: this.shopId
             },
             timeoutMs: this.timeoutMs
           });
@@ -63,14 +71,26 @@ export class LocationService {
   }
 
   async getProvinces() {
-    return this.fetchGhn('/province');
+    return this.fetchGhn('public-api/master-data/province');
   }
 
   async getDistricts(provinceId: number) {
-    return this.fetchGhn('/district', { province_id: provinceId });
+    return this.fetchGhn('public-api/master-data/district', {
+      province_id: provinceId
+    });
   }
 
   async getWards(districtId: number) {
-    return this.fetchGhn('/ward', { district_id: districtId });
+    return this.fetchGhn('public-api/master-data/ward', {
+      district_id: districtId
+    });
+  }
+
+  async getShippingFee(dto: GetShippingFeeDto) {
+    return this.fetchGhn('v2/shipping-order/fee', {
+      to_ward_code: dto.toWardCode,
+      to_district_id: dto.toDistrictId,
+      insurance_value: dto.insuranceValue
+    });
   }
 }

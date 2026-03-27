@@ -66,7 +66,7 @@ export class CategoryRepository extends BaseRepository<
         orderBy.push(orderItem as Prisma.CategoryOrderByWithRelationInput);
       });
     } else {
-      orderBy.push({ position: 'asc' });
+      orderBy.push({ createdAt: 'desc' });
     }
 
     const finalOrderBy =

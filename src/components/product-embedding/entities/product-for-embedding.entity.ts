@@ -14,6 +14,14 @@ export class ProductForEmbedding {
   category: {
     name: string;
   } | null;
+  variants: {
+    colorOptionValue: {
+      value: string;
+    };
+    sizeOptionValue: {
+      value: string;
+    };
+  }[];
   isActive: boolean;
   embeddingContentHash: string | null;
 }

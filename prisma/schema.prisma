@@ -49,6 +49,12 @@ enum ProductOptionType {
   COLOR
   SIZE
 }
+ 
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
 
 model EntitySequence {
   key          String   @id
@@ -82,6 +88,7 @@ model User {
   cart      Cart?
   orders    Order[]
   reviews   Review[]
+  chatConversations ChatConversation[]
 
   @@map("users")
 }
@@ -426,4 +433,45 @@ model Payment {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("payments")
+}
+
+model ChatConversation {
+  id        String  @id @default(uuid())
+  sessionKey String @map("session_key")
+
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  title      String?
+  lastIntent String? @map("last_intent")
+  metadata   Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  messages ChatMessage[]
+
+  @@index([sessionKey, updatedAt])
+  @@index([userId, updatedAt])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id String @id @default(uuid())
+
+  conversationId String           @map("conversation_id")
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role   ChatMessageRole
+  intent String?
+  content String @db.Text
+
+  toolCalls      Json? @map("tool_calls")
+  productPayload Json? @map("product_payload")
+  metadata       Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
 }
