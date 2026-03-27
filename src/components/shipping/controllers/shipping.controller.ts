@@ -1,6 +1,6 @@
 import { GetShippingFeeDto } from '@components/shipping/dtos/get-shipping-fee.dto';
 import { ShippingService } from '@components/shipping/services/shipping.serivce';
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Locations')
@@ -30,7 +30,7 @@ export class ShippingController {
 
   @Get('shipping-fee')
   @ApiOperation({ summary: 'Tính phí vận chuyển từ GHN' })
-  async getShippingFee(@Param() GetShippingFeeDto: GetShippingFeeDto) {
-    return this.shippingService.getShippingFee(GetShippingFeeDto);
+  async getShippingFee(@Query() dto: GetShippingFeeDto) {
+    return this.shippingService.getShippingFee(dto);
   }
 }

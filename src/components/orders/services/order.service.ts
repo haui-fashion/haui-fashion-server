@@ -8,6 +8,7 @@ import { CreateOrderDto } from '@components/orders/dtos/create-order.dto';
 import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderRepository } from '@components/orders/repositories/order.repository';
+import { ShippingService } from '@components/shipping/services/shipping.serivce';
 import { EntityCodeService, PrismaService } from '@core/modules/prisma';
 import {
   ConflictException,
@@ -27,7 +28,8 @@ export class OrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderRepository: OrderRepository,
-    private readonly entityCodeService: EntityCodeService
+    private readonly entityCodeService: EntityCodeService,
+    private readonly shippingService: ShippingService
   ) {}
 
   async createFromMyCart(userId: string, dto: CreateOrderDto) {
@@ -91,11 +93,17 @@ export class OrderService {
       }
     }
 
-    const totalAmount = cart.items.reduce(
+    const totalProductAmount = cart.items.reduce(
       (sum, item) =>
         sum.plus(new Prisma.Decimal(item.variant.price).mul(item.quantity)),
       new Prisma.Decimal(0)
     );
+
+    const shippingFee = await this.calculateShippingFee(
+      address,
+      totalProductAmount
+    );
+    const totalAmount = totalProductAmount.plus(shippingFee);
 
     const paymentMethod = dto.paymentMethod ?? PaymentMethod.COD;
 
@@ -151,6 +159,8 @@ export class OrderService {
                 wardName: address.wardName,
                 street: address.street
               },
+              totalProductAmount,
+              shippingFee,
               totalAmount,
               items: {
                 create: cart.items.map((item) => ({
@@ -211,6 +221,43 @@ export class OrderService {
     throw new ConflictException(
       'Không thể tạo mã đơn hàng tự động. Vui lòng thử lại.'
     );
+  }
+
+  private async calculateShippingFee(
+    address: {
+      districtId: number | null;
+      wardCode: number | null;
+    },
+    totalProductAmount: Prisma.Decimal
+  ): Promise<Prisma.Decimal> {
+    if (!address.districtId || !address.wardCode) {
+      return new Prisma.Decimal(0);
+    }
+
+    try {
+      const shippingData = await this.shippingService.getShippingFee({
+        insuranceValue: Number(totalProductAmount.toFixed(0)),
+        toDistrictId: String(address.districtId),
+        toWardCode: String(address.wardCode)
+      });
+
+      const rawFee =
+        (shippingData as { total?: unknown })?.total ??
+        (shippingData as { service_fee?: unknown })?.service_fee ??
+        (shippingData as { total_fee?: unknown })?.total_fee ??
+        0;
+
+      const normalizedFee = Number(rawFee);
+      if (!Number.isFinite(normalizedFee) || normalizedFee < 0) {
+        return new Prisma.Decimal(0);
+      }
+
+      return new Prisma.Decimal(normalizedFee);
+    } catch {
+      throw new ConflictException(
+        'Không thể tính phí vận chuyển. Vui lòng thử lại.'
+      );
+    }
   }
 
   async findMyOrders(userId: string) {

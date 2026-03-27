@@ -13,6 +13,14 @@ export class OrderEntity extends BaseEntity {
 
   @Expose()
   @ApiProperty({ type: String })
+  totalProductAmount: string;
+
+  @Expose()
+  @ApiProperty({ type: String })
+  shippingFee: string;
+
+  @Expose()
+  @ApiProperty({ type: String })
   totalAmount: string;
 
   @Expose()

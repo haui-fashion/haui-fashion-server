@@ -385,6 +385,8 @@ model Order {
   shippingAddress Json @map("shipping_address")
 
   status      OrderStatus @default(PENDING)
+  totalProductAmount Decimal @db.Decimal(10, 2) @map("total_product_amount")
+  shippingFee Decimal @db.Decimal(10, 2) @map("shipping_fee")
   totalAmount Decimal     @db.Decimal(10, 2) @map("total_amount")
 
   createdAt DateTime @default(now()) @map("created_at")
