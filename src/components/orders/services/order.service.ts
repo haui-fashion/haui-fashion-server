@@ -4,7 +4,9 @@ import {
   PAYMENT_CODE_OPTIONS,
   STATUS_TRANSITIONS
 } from '@components/orders/constants/order.constant';
+import { CheckoutOrderItemDto } from '@components/orders/dtos/checkout-order-item.dto';
 import { CreateOrderDto } from '@components/orders/dtos/create-order.dto';
+import { PreviewOrderDto } from '@components/orders/dtos/preview-order.dto';
 import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderRepository } from '@components/orders/repositories/order.repository';
@@ -23,6 +25,28 @@ import {
   Prisma
 } from '@prisma/client';
 
+type CheckoutCartItem = {
+  cartItemId: string;
+  variantId: string;
+  quantity: number;
+  variant: {
+    id: string;
+    sku: string;
+    price: Prisma.Decimal;
+    stock: number;
+    productId: string;
+    product: {
+      name: string;
+    };
+    colorOptionValue: {
+      value: string;
+    };
+    sizeOptionValue: {
+      value: string;
+    };
+  };
+};
+
 @Injectable()
 export class OrderService {
   constructor(
@@ -33,77 +57,21 @@ export class OrderService {
   ) {}
 
   async createFromMyCart(userId: string, dto: CreateOrderDto) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId
-      },
-      select: {
-        id: true,
-        code: true,
-        fullname: true,
-        email: true
-      }
-    });
-
-    if (!user) {
-      throw new NotFoundException(`Không tìm thấy người dùng với id ${userId}`);
-    }
-
-    const address = await this.prisma.address.findFirst({
-      where: {
-        id: dto.addressId,
-        userId
-      }
-    });
-
-    if (!address) {
-      throw new NotFoundException(
-        `Không tìm thấy địa chỉ giao hàng với id ${dto.addressId}`
-      );
-    }
-
-    const cart = await this.prisma.cart.findUnique({
-      where: {
-        userId
-      },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: true,
-                colorOptionValue: true,
-                sizeOptionValue: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    if (!cart || cart.items.length === 0) {
-      throw new ConflictException('Giỏ hàng trống, không thể tạo đơn hàng');
-    }
-
-    for (const item of cart.items) {
-      if (item.variant.stock < item.quantity) {
-        throw new ConflictException(
-          `Biến thể ${item.variant.sku} không đủ tồn kho để đặt hàng`
-        );
-      }
-    }
-
-    const totalProductAmount = cart.items.reduce(
-      (sum, item) =>
-        sum.plus(new Prisma.Decimal(item.variant.price).mul(item.quantity)),
-      new Prisma.Decimal(0)
+    const checkoutContext = await this.buildCheckoutContext(
+      userId,
+      dto.addressId,
+      dto.items
     );
 
-    const shippingFee = await this.calculateShippingFee(
+    const {
+      user,
       address,
-      totalProductAmount
-    );
-    const totalAmount = totalProductAmount.plus(shippingFee);
+      cart,
+      checkoutItems,
+      totalProductAmount,
+      shippingFee,
+      totalAmount
+    } = checkoutContext;
 
     const paymentMethod = dto.paymentMethod ?? PaymentMethod.COD;
 
@@ -115,7 +83,7 @@ export class OrderService {
 
       try {
         const created = await this.prisma.$transaction(async (tx) => {
-          for (const item of cart.items) {
+          for (const item of checkoutItems) {
             const updatedStock = await tx.variant.updateMany({
               where: {
                 id: item.variantId,
@@ -163,7 +131,7 @@ export class OrderService {
               shippingFee,
               totalAmount,
               items: {
-                create: cart.items.map((item) => ({
+                create: checkoutItems.map((item) => ({
                   variantId: item.variantId,
                   quantity: item.quantity,
                   price: item.variant.price,
@@ -201,11 +169,21 @@ export class OrderService {
             }
           });
 
-          await tx.cartItem.deleteMany({
-            where: {
-              cartId: cart.id
+          if (dto.items && dto.items.length > 0) {
+            for (const item of checkoutItems) {
+              await tx.cartItem.delete({
+                where: {
+                  id: item.cartItemId
+                }
+              });
             }
-          });
+          } else {
+            await tx.cartItem.deleteMany({
+              where: {
+                cartId: cart.id
+              }
+            });
+          }
 
           return order;
         });
@@ -221,6 +199,157 @@ export class OrderService {
     throw new ConflictException(
       'Không thể tạo mã đơn hàng tự động. Vui lòng thử lại.'
     );
+  }
+
+  async previewOrder(userId: string, dto: PreviewOrderDto) {
+    const { checkoutItems, totalProductAmount, shippingFee, totalAmount } =
+      await this.buildCheckoutContext(userId, dto.addressId, dto.items);
+
+    return {
+      totalProductAmount: totalProductAmount.toFixed(2),
+      shippingFee: shippingFee.toFixed(2),
+      totalAmount: totalAmount.toFixed(2),
+      items: checkoutItems.map((item) => {
+        const unitPrice = new Prisma.Decimal(item.variant.price);
+
+        return {
+          variantId: item.variantId,
+          sku: item.variant.sku,
+          productId: item.variant.productId,
+          productName: item.variant.product.name,
+          size: item.variant.sizeOptionValue.value,
+          color: item.variant.colorOptionValue.value,
+          quantity: item.quantity,
+          unitPrice: unitPrice.toFixed(2),
+          lineAmount: unitPrice.mul(item.quantity).toFixed(2)
+        };
+      })
+    };
+  }
+
+  private async buildCheckoutContext(
+    userId: string,
+    addressId: string,
+    requestedItems?: CheckoutOrderItemDto[]
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId
+      },
+      select: {
+        id: true,
+        code: true,
+        fullname: true,
+        email: true
+      }
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Không tìm thấy người dùng với id ${userId}`);
+    }
+
+    const address = await this.prisma.address.findFirst({
+      where: {
+        id: addressId,
+        userId
+      }
+    });
+
+    if (!address) {
+      throw new NotFoundException(
+        `Không tìm thấy địa chỉ giao hàng với id ${addressId}`
+      );
+    }
+
+    const cart = await this.prisma.cart.findUnique({
+      where: {
+        userId
+      },
+      include: {
+        items: {
+          include: {
+            variant: {
+              include: {
+                product: true,
+                colorOptionValue: true,
+                sizeOptionValue: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!cart || cart.items.length === 0) {
+      throw new ConflictException('Giỏ hàng trống, không thể tạo đơn hàng');
+    }
+
+    let checkoutItems: CheckoutCartItem[] = cart.items.map((item) => ({
+      cartItemId: item.id,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      variant: item.variant
+    }));
+
+    if (requestedItems && requestedItems.length > 0) {
+      const cartItemIds = requestedItems.map((item) => item.cartItemId);
+      const duplicateCount = cartItemIds.length - new Set(cartItemIds).size;
+      if (duplicateCount > 0) {
+        throw new ConflictException(
+          'Danh sách sản phẩm thanh toán chứa cart item bị trùng'
+        );
+      }
+
+      const cartItemById = new Map(cart.items.map((item) => [item.id, item]));
+
+      checkoutItems = requestedItems.map((item) => {
+        const cartItem = cartItemById.get(item.cartItemId);
+        if (!cartItem) {
+          throw new ConflictException(
+            `Cart item ${item.cartItemId} không tồn tại trong giỏ hàng`
+          );
+        }
+
+        return {
+          cartItemId: cartItem.id,
+          variantId: cartItem.variantId,
+          quantity: cartItem.quantity,
+          variant: cartItem.variant
+        };
+      });
+    }
+
+    for (const item of checkoutItems) {
+      if (item.variant.stock < item.quantity) {
+        throw new ConflictException(
+          `Biến thể ${item.variant.sku} không đủ tồn kho để đặt hàng`
+        );
+      }
+    }
+
+    const totalProductAmount = checkoutItems.reduce(
+      (sum, item) =>
+        sum.plus(new Prisma.Decimal(item.variant.price).mul(item.quantity)),
+      new Prisma.Decimal(0)
+    );
+
+    const shippingFee = await this.calculateShippingFee(
+      {
+        districtId: address.districtId,
+        wardCode: address.wardCode
+      },
+      totalProductAmount
+    );
+
+    return {
+      user,
+      address,
+      cart,
+      checkoutItems,
+      totalProductAmount,
+      shippingFee,
+      totalAmount: totalProductAmount.plus(shippingFee)
+    };
   }
 
   private async calculateShippingFee(

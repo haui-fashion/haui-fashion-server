@@ -1,4 +1,5 @@
 import { CreateOrderDto } from '@components/orders/dtos/create-order.dto';
+import { PreviewOrderDto } from '@components/orders/dtos/preview-order.dto';
 import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderService } from '@components/orders/services/order.service';
@@ -29,6 +30,15 @@ export class OrderController {
     @Body() dto: CreateOrderDto
   ) {
     return this.orderService.createFromMyCart(user.userId, dto);
+  }
+
+  @Post('preview')
+  @ApiOperation({ summary: 'Preview checkout totals before placing order' })
+  async preview(
+    @CurrentUser() user: CurrentUserDto,
+    @Body() dto: PreviewOrderDto
+  ) {
+    return this.orderService.previewOrder(user.userId, dto);
   }
 
   @Get('me')
