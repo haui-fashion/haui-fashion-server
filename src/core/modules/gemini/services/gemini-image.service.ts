@@ -65,15 +65,12 @@ export class GeminiImageService {
     clothingMimeType: string,
     modelImageBase64: string,
     modelMimeType: string,
-    prompt?: string
+    garmentType?: string
   ): Promise<ImageGenerationResult> {
-    const defaultPrompt =
-      'Generate a realistic virtual try-on image showing the person wearing the clothing item. ' +
-      "Maintain the person's body shape, skin tone, and pose. " +
-      'The clothing should fit naturally and look realistic.';
+    const prompt = this.buildVtonPrompt(garmentType);
 
     const contents = [
-      { text: prompt || defaultPrompt },
+      { text: prompt },
       {
         inlineData: {
           mimeType: clothingMimeType,
@@ -97,6 +94,30 @@ export class GeminiImageService {
     });
 
     return this.extractImageFromResponse(response);
+  }
+
+  private buildVtonPrompt(garmentType?: string): string {
+    const garmentHint = garmentType
+      ? `Sản phẩm thời trang là: ${garmentType}.`
+      : 'Hãy xác định loại sản phẩm thời trang (áo, quần, váy, áo khoác, giày, phụ kiện, v.v.) từ hình ảnh thứ nhất.';
+
+    return [
+      'Bạn là một hệ thống thử đồ ảo (virtual try-on) chuyên nghiệp cho nền tảng thương mại điện tử thời trang.',
+      '',
+      'NHIỆM VỤ: Tạo ra duy nhất một hình ảnh chân thực (photorealistic) của người mẫu (hình ảnh thứ hai) đang mặc sản phẩm thời trang (hình ảnh thứ nhất).',
+      '',
+      `${garmentHint}`,
+      '',
+      'NGUYÊN TẮC:',
+      '- GIỮ NGUYÊN hoàn toàn khuôn mặt, vóc dáng, màu da, kiểu tóc và tư thế của người mẫu.',
+      '- ĐIỀU CHỈNH trang phục vừa vặn tự nhiên theo cơ thể, đúng tỷ lệ và dáng đứng.',
+      '- ĐỒNG BỘ ánh sáng, bóng đổ và nhiệt độ màu với ảnh người mẫu.',
+      '- TÁI HIỆN chi tiết vải một cách chân thực: nếp nhăn, độ rủ, độ gấp và texture.',
+      '- GIỮ NGUYÊN các trang phục khác mà người mẫu đang mặc — chỉ thay thế đúng sản phẩm liên quan.',
+      '- Đối với giày: hiển thị đúng vị trí trên chân, đúng phối cảnh và có bóng đổ tiếp đất.',
+      '- Đối với phụ kiện (mũ, túi, đồng hồ, kính, trang sức): đặt đúng vị trí tự nhiên.',
+      '- Kết quả đầu ra là một hình ảnh chất lượng cao, toàn thân hoặc phần cơ thể phù hợp, không chứa chữ, watermark hoặc ghép ảnh (collage).'
+    ].join('\n');
   }
 
   private extractImageFromResponse(response: any): ImageGenerationResult {

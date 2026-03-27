@@ -7,7 +7,9 @@ import { SyncProductEmbeddingDto } from '@components/products/dtos/sync-product-
 import { SyncProductEmbeddingsDto } from '@components/products/dtos/sync-product-embeddings.dto';
 import { UpdateProductDto } from '@components/products/dtos/update-product.dto';
 import { UpsertVariantGroupDto } from '@components/products/dtos/upsert-variant-group.dto';
+import { VirtualTryOnDto } from '@components/products/dtos/virtual-try-on.dto';
 import { ProductService } from '@components/products/services/product.service';
+import { VirtualTryOnService } from '@components/products/services/virtual-try-on.service';
 import { Public } from '@core/utilities/decorators';
 import { Roles } from '@core/utilities/decorators/roles.decorator';
 import {
@@ -28,7 +30,8 @@ import { Role } from '@prisma/client';
 export class ProductController {
   constructor(
     private readonly productService: ProductService,
-    private readonly batchJobOrchestratorService: BatchJobOrchestratorService
+    private readonly batchJobOrchestratorService: BatchJobOrchestratorService,
+    private readonly virtualTryOnService: VirtualTryOnService
   ) {}
 
   @Post()
@@ -48,6 +51,15 @@ export class ProductController {
   })
   generateDescription(@Body() dto: GenerateProductDescriptionDto) {
     return this.productService.generateDescriptionJson(dto);
+  }
+
+  @Post('ai/virtual-try-on')
+  @Public()
+  @ApiOperation({
+    summary: 'Virtual try-on: apply product clothing to user photo'
+  })
+  virtualTryOn(@Body() dto: VirtualTryOnDto) {
+    return this.virtualTryOnService.tryOn(dto);
   }
 
   @Post('embeddings/sync')
