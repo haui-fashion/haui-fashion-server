@@ -4,6 +4,12 @@ import { ChatbotIntentToolPickerService } from '@components/chatbot/services/cha
 import { ChatbotToolCallLoopService } from '@components/chatbot/services/chatbot-tool-call-loop.service';
 import { ChatbotToolCatalogService } from '@components/chatbot/services/chatbot-tool-catalog.service';
 import { ChatbotToolExecutorService } from '@components/chatbot/services/chatbot-tool-executor.service';
+import { CheckOrderStatusHandler } from '@components/chatbot/tools-handler/check-order-status.handler';
+import { GetFaqHandler } from '@components/chatbot/tools-handler/get-faq.handler';
+import { GetListOrdersHandler } from '@components/chatbot/tools-handler/get-list-orders.handler';
+import { GetPolicyHandler } from '@components/chatbot/tools-handler/get-policy.handler';
+import { GetProductDetailHandler } from '@components/chatbot/tools-handler/get-product-detail.handler';
+import { SearchProductsHandler } from '@components/chatbot/tools-handler/search-products.handler';
 import { Module } from '@nestjs/common';
 
 @Module({
@@ -13,7 +19,13 @@ import { Module } from '@nestjs/common';
     ChatbotIntentToolPickerService,
     ChatbotToolExecutorService,
     ChatbotToolCallLoopService,
-    ChatbotConversationService
+    ChatbotConversationService,
+    SearchProductsHandler,
+    GetProductDetailHandler,
+    CheckOrderStatusHandler,
+    GetListOrdersHandler,
+    GetFaqHandler,
+    GetPolicyHandler
   ],
   exports: [
     ChatbotToolCatalogService,

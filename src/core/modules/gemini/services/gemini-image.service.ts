@@ -51,7 +51,7 @@ export class GeminiImageService {
 
     const response = await this.geminiGenerationService.generate({
       model: this.model,
-      contents,
+      contents: [{ role: 'user', parts: contents }],
       config: {
         responseModalities: ['IMAGE']
       }
@@ -90,7 +90,7 @@ export class GeminiImageService {
 
     const response = await this.geminiGenerationService.generate({
       model: this.model,
-      contents,
+      contents: [{ role: 'user', parts: contents }],
       config: {
         responseModalities: ['IMAGE']
       }

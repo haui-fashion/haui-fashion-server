@@ -13,7 +13,7 @@ export type GeminiSchemaType =
 export interface GeminiJsonSchema {
   type: GeminiSchemaType;
   description?: string;
-  enum?: Array<string | number | boolean>;
+  enum?: string[];
   properties?: Record<string, GeminiJsonSchema>;
   items?: GeminiJsonSchema;
   required?: string[];
@@ -55,6 +55,7 @@ export interface ToolExecutionResult {
   error: null | {
     code: string;
     message: string;
+    suggestion?: string;
   };
   meta?: {
     source?: string;

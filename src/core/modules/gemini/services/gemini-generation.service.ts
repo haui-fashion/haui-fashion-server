@@ -3,7 +3,12 @@ import {
   GEMINI_MAX_OUTPUT_TOKENS,
   GEMINI_MODEL_CONFIG_PATHS
 } from '@core/modules/gemini/constants/gemini.constants';
-import { GoogleGenAI } from '@google/genai';
+import {
+  Content,
+  GenerateContentConfig,
+  GenerateContentResponse,
+  GoogleGenAI
+} from '@google/genai';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GEMINI_CLIENT } from '../gemini.provider';
@@ -22,10 +27,10 @@ export class GeminiGenerationService {
   }
 
   async generate(params: {
-    contents: any;
+    contents: string | Content[];
     model?: string;
-    config?: Record<string, unknown>;
-  }) {
+    config?: GenerateContentConfig;
+  }): Promise<GenerateContentResponse> {
     return this.ai.models.generateContent({
       model: params.model || this.model,
       contents: params.contents,
@@ -38,9 +43,9 @@ export class GeminiGenerationService {
   }
 
   async generateText(params: {
-    contents: any;
+    contents: string | Content[];
     model?: string;
-    config?: Record<string, unknown>;
+    config?: GenerateContentConfig;
   }): Promise<string> {
     const response = await this.generate(params);
     const text = response.text;

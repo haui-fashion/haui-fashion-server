@@ -9,6 +9,7 @@ import { ChatbotIntentToolPickerService } from '@components/chatbot/services/cha
 import { ChatbotToolExecutorService } from '@components/chatbot/services/chatbot-tool-executor.service';
 import { GeminiGenerationService } from '@core/modules/gemini/services/gemini-generation.service';
 import { OllamaIntent } from '@core/modules/ollama/interfaces/intent-router.interface';
+import { Content, GenerateContentConfig, Part } from '@google/genai';
 import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
@@ -31,11 +32,11 @@ export class ChatbotToolCallLoopService {
   }): Promise<GeminiToolLoopResult> {
     const toolBundle = this.toolPickerService.pickByIntent(params.intent);
     const toolCalls: ToolInvocationLog[] = [];
-    const contents: Array<Record<string, unknown>> = [];
+    const contents: Content[] = [];
 
     for (const historyTurn of params.history || []) {
       contents.push({
-        role: historyTurn.role,
+        role: historyTurn.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: historyTurn.content }]
       });
     }
@@ -44,6 +45,30 @@ export class ChatbotToolCallLoopService {
       role: 'user',
       parts: [{ text: params.message }]
     });
+
+    const toolConfig: Partial<GenerateContentConfig> =
+      toolBundle.declarations.length > 0
+        ? {
+            tools: [
+              {
+                functionDeclarations:
+                  toolBundle.declarations as GenerateContentConfig['tools'] extends (infer T)[]
+                    ? T extends { functionDeclarations: infer FD }
+                      ? FD
+                      : never
+                    : never
+              }
+            ] as GenerateContentConfig['tools'],
+            toolConfig: {
+              functionCallingConfig: {
+                mode: toolBundle.mode as any,
+                ...(toolBundle.allowedFunctionNames.length > 0 && {
+                  allowedFunctionNames: toolBundle.allowedFunctionNames
+                })
+              }
+            }
+          }
+        : {};
 
     const maxIterations = CHATBOT_TOOL_CALLING_MAX_ITERATIONS;
 
@@ -55,72 +80,44 @@ export class ChatbotToolCallLoopService {
           ...(params.systemInstruction && {
             systemInstruction: params.systemInstruction
           }),
-          tools:
-            toolBundle.declarations.length > 0
-              ? [{ functionDeclarations: toolBundle.declarations }]
-              : [],
-          toolConfig: {
-            functionCallingConfig: {
-              mode: toolBundle.mode,
-              ...(toolBundle.allowedFunctionNames.length > 0 && {
-                allowedFunctionNames: toolBundle.allowedFunctionNames
-              })
-            }
-          }
+          ...toolConfig
         }
       });
 
-      const functionCalls = (result.functionCalls || []) as Array<{
-        id?: string;
-        name?: string;
-        args?: Record<string, unknown>;
-      }>;
+      const functionCalls = result.functionCalls || [];
 
       if (functionCalls.length === 0) {
         return {
-          answer: result.text || 'Xin loi, toi chua the tra loi luc nay.',
+          answer: result.text || 'Xin lỗi, tôi chưa thể trả lời lúc này.',
           toolCalls
         };
       }
 
-      for (const functionCall of functionCalls) {
+      // Push complete model response content (preserving thoughtSignature)
+      const modelContent = result.candidates?.[0]?.content;
+      if (modelContent) {
+        contents.push(modelContent);
+      }
+
+      // Execute all function calls in parallel
+      const executionTasks = functionCalls.map(async (functionCall) => {
         const functionName = (functionCall.name || '').trim();
 
         if (!toolBundle.allowedFunctionNames.includes(functionName)) {
-          const deniedResult = {
-            ok: false,
-            data: null,
-            error: {
-              code: 'FORBIDDEN_TOOL',
-              message: `Tool ${functionName || 'unknown'} is not allowed for intent ${params.intent}`
+          return {
+            functionCall,
+            functionName: functionName || 'unknown',
+            result: {
+              ok: false as const,
+              data: null,
+              error: {
+                code: 'FORBIDDEN_TOOL',
+                message: `Tool ${functionName || 'unknown'} is not allowed for intent ${params.intent}`,
+                suggestion:
+                  'Try rephrasing your question or ask something related to the current topic.'
+              }
             }
           };
-
-          toolCalls.push({
-            name: functionName || 'unknown',
-            args: functionCall.args || {},
-            result: deniedResult
-          });
-
-          contents.push({
-            role: 'model',
-            parts: [{ functionCall }]
-          });
-          contents.push({
-            role: 'user',
-            parts: [
-              {
-                functionResponse: {
-                  name: functionName || 'unknown',
-                  id: functionCall.id,
-                  response: {
-                    result: deniedResult
-                  }
-                }
-              }
-            ]
-          });
-          continue;
         }
 
         const executionResult = await this.toolExecutorService.execute(
@@ -132,39 +129,67 @@ export class ChatbotToolCallLoopService {
           }
         );
 
-        toolCalls.push({
-          name: functionName,
-          args: functionCall.args || {},
+        return {
+          functionCall,
+          functionName,
           result: executionResult
+        };
+      });
+
+      const executionResults = await Promise.all(executionTasks);
+
+      // Build function response parts and log tool calls
+      const functionResponseParts: Part[] = [];
+
+      for (const execution of executionResults) {
+        toolCalls.push({
+          name: execution.functionName,
+          args: execution.functionCall.args || {},
+          result: execution.result
         });
 
-        contents.push({
-          role: 'model',
-          parts: [{ functionCall }]
-        });
-        contents.push({
-          role: 'user',
-          parts: [
-            {
-              functionResponse: {
-                name: functionName,
-                id: functionCall.id,
-                response: {
-                  result: executionResult
-                }
-              }
+        functionResponseParts.push({
+          functionResponse: {
+            name: execution.functionName,
+            id: execution.functionCall.id,
+            response: {
+              result: execution.result
             }
-          ]
+          }
         });
       }
+
+      contents.push({
+        role: 'user',
+        parts: functionResponseParts
+      });
     }
 
+    // After max iterations, make one final call with mode NONE to force text response
     this.logger.warn(
-      `Function calling loop reached max iterations (${maxIterations})`
+      `Function calling loop reached max iterations (${maxIterations}), forcing text response`
     );
 
+    const finalResult = await this.geminiGenerationService.generate({
+      model: params.model,
+      contents,
+      config: {
+        ...(params.systemInstruction && {
+          systemInstruction: params.systemInstruction
+        }),
+        tools: [],
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'NONE' as any
+          }
+        }
+      }
+    });
+
     return {
-      answer: 'Xin loi, toi can them thoi gian de xu ly yeu cau nay.',
+      answer:
+        finalResult.text ||
+        'Xin lỗi, tôi cần thêm thời gian để xử lý yêu cầu này.',
       toolCalls
     };
   }

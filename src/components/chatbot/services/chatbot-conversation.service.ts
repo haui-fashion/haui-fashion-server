@@ -1,4 +1,7 @@
-import { ToolInvocationLog } from '@components/chatbot/interfaces/chatbot-tooling.interface';
+import {
+  ChatHistoryTurn,
+  ToolInvocationLog
+} from '@components/chatbot/interfaces/chatbot-tooling.interface';
 import { ChatbotToolCallLoopService } from '@components/chatbot/services/chatbot-tool-call-loop.service';
 import { AppCacheService } from '@core/modules/app-cache/services/app-cache.service';
 import { OllamaIntentRouterService } from '@core/modules/ollama/services/ollama-intent-router.service';
@@ -20,11 +23,6 @@ interface StreamChatInput {
   traceId?: string;
   userId?: string;
 }
-
-type ConversationHistoryTurn = {
-  role: 'user' | 'assistant';
-  content: string;
-};
 
 interface ProductCardPayload {
   id?: string;
@@ -137,7 +135,9 @@ export class ChatbotConversationService {
     }
 
     const conversation = await this.resolveConversation(input);
-    const history = await this.getConversationHistory(conversation.id);
+    const history: ChatHistoryTurn[] = await this.getConversationHistory(
+      conversation.id
+    );
 
     await this.persistMessage({
       conversationId: conversation.id,
@@ -261,10 +261,9 @@ export class ChatbotConversationService {
 
   private async getConversationHistory(
     conversationId: string
-  ): Promise<ConversationHistoryTurn[]> {
+  ): Promise<ChatHistoryTurn[]> {
     const cacheKey = this.getMemoryCacheKey(conversationId);
-    const cached =
-      await this.appCacheService.get<ConversationHistoryTurn[]>(cacheKey);
+    const cached = await this.appCacheService.get<ChatHistoryTurn[]>(cacheKey);
     if (cached && cached.length > 0) {
       return cached;
     }
@@ -286,7 +285,7 @@ export class ChatbotConversationService {
       .slice()
       .reverse()
       .map((item) => this.toHistoryTurn(item))
-      .filter((item): item is ConversationHistoryTurn => item != null);
+      .filter((item): item is ChatHistoryTurn => item != null);
 
     await this.appCacheService.set(cacheKey, history, this.memoryTtlSeconds);
     return history;
@@ -300,7 +299,7 @@ export class ChatbotConversationService {
     await this.getConversationHistory(conversationId);
   }
 
-  private toHistoryTurn(message: ChatMessage): ConversationHistoryTurn | null {
+  private toHistoryTurn(message: ChatMessage): ChatHistoryTurn | null {
     if (message.role === ChatMessageRole.USER) {
       return {
         role: 'user',
@@ -323,12 +322,26 @@ export class ChatbotConversationService {
   }
 
   private buildSystemInstruction(intent: string): string {
-    return [
-      'Ban la tro ly cho website thuong mai dien tu nganh thoi trang.',
-      `Intent hien tai: ${intent}.`,
-      'Neu co du lieu tool tra ve san pham, hay tra loi ngan gon va dua goi y ro rang.',
-      'Khong bia thong tin khong co trong ket qua tool.'
-    ].join(' ');
+    const baseInstruction = [
+      'Bạn là trợ lý AI cho một website thương mại điện tử chuyên về thời trang Việt Nam.',
+      '',
+      'Vai trò của bạn:',
+      '- Hỗ trợ khách hàng tìm kiếm sản phẩm thời trang (áo, quần, váy, phụ kiện...)',
+      '- Tư vấn về size, màu sắc, chất liệu, phong cách phù hợp',
+      '- Tra cứu thông tin đơn hàng và thanh toán',
+      '- Giải đáp chính sách đổi trả, vận chuyển, bảo hành',
+      '',
+      'Quy tắc:',
+      '- Trả lời bằng tiếng Việt, thân thiện và chuyên nghiệp',
+      '- Chỉ sử dụng thông tin từ kết quả tool, không bịa đặt',
+      '- Khi gợi ý sản phẩm, trình bày ngắn gọn với tên, giá, đặc điểm nổi bật',
+      '- Nếu không tìm thấy kết quả, hãy gợi ý khách thử từ khóa khác hoặc mô tả chi tiết hơn',
+      '- Nếu khách hỏi ngoài phạm vi thời trang/mua sắm, lịch sự từ chối và hướng dẫn quay lại chủ đề',
+      '',
+      `Intent hiện tại: ${intent}.`
+    ].join('\n');
+
+    return baseInstruction;
   }
 
   private chunkAnswer(answer: string): string[] {

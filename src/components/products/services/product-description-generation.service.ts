@@ -60,7 +60,7 @@ export class ProductDescriptionGenerationService {
     }
 
     const text = await this.geminiGenerationService.generateText({
-      contents,
+      contents: [{ role: 'user', parts: contents }],
       config: {
         responseMimeType: 'application/json',
         responseSchema: PRODUCT_DESCRIPTION_RESPONSE_SCHEMA

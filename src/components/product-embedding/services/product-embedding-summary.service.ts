@@ -27,7 +27,7 @@ export class ProductEmbeddingSummaryService {
     Dữ liệu: ${JSON.stringify(inputs)}`;
 
     const text = await this.geminiGenerationService.generateText({
-      contents: [{ text: prompt }],
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         responseMimeType: 'application/json'
       }
