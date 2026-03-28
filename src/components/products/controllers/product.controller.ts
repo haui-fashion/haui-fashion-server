@@ -17,12 +17,22 @@ import {
   Controller,
   Delete,
   Get,
+  MaxFileSizeValidator,
   Param,
+  ParseFilePipe,
   Patch,
   Post,
-  Query
+  Query,
+  UploadedFile,
+  UseInterceptors
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags
+} from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
 @ApiTags('Products')
@@ -55,11 +65,21 @@ export class ProductController {
 
   @Post('ai/virtual-try-on')
   @Public()
+  @UseInterceptors(FileInterceptor('userImage'))
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Virtual try-on: apply product clothing to user photo'
   })
-  virtualTryOn(@Body() dto: VirtualTryOnDto) {
-    return this.virtualTryOnService.tryOn(dto);
+  virtualTryOn(
+    @Body() dto: VirtualTryOnDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 })]
+      })
+    )
+    userImage: Express.Multer.File
+  ) {
+    return this.virtualTryOnService.tryOn(dto, userImage);
   }
 
   @Post('embeddings/sync')

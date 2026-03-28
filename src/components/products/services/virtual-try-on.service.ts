@@ -17,7 +17,7 @@ export class VirtualTryOnService {
     private readonly geminiImageService: GeminiImageService
   ) {}
 
-  async tryOn(dto: VirtualTryOnDto) {
+  async tryOn(dto: VirtualTryOnDto, userImage: Express.Multer.File) {
     const productImage = await this.prisma.productImage.findUnique({
       where: { id: dto.productImageId },
       include: {
@@ -25,6 +25,8 @@ export class VirtualTryOnService {
         product: { select: { id: true, name: true } }
       }
     });
+
+    console.log('productImage: ', JSON.stringify(productImage, null, 2));
 
     if (!productImage) {
       throw new NotFoundException(
@@ -36,18 +38,30 @@ export class VirtualTryOnService {
       productImage.file.url
     );
     const clothingMimeType = productImage.file.mimetype || 'image/jpeg';
-    const userMimeType = dto.userImageMimeType || 'image/jpeg';
+
+    if (!userImage || !userImage.buffer?.length) {
+      throw new BadRequestException('Không tìm thấy ảnh người dùng để thử đồ.');
+    }
+
+    if (!userImage.mimetype?.startsWith('image/')) {
+      throw new BadRequestException('File tải lên phải là ảnh hợp lệ.');
+    }
+
+    const userMimeType = userImage.mimetype || 'image/jpeg';
+    const userImageBase64 = this.convertBufferToBase64(userImage.buffer);
+    const productName = dto.productName?.trim() || productImage.product.name;
 
     this.logger.log(
-      `VTON request: product="${productImage.product.name}", garmentType="${dto.garmentType || 'auto'}"`
+      `VTON request: product="${productName}", garmentType="${dto.garmentType || 'auto'}"`
     );
 
     const result = await this.geminiImageService.virtualTryOn(
       clothingBase64,
       clothingMimeType,
-      dto.userImageBase64,
+      userImageBase64,
       userMimeType,
-      dto.garmentType
+      dto.garmentType,
+      productName
     );
 
     return {
@@ -56,6 +70,10 @@ export class VirtualTryOnService {
       productId: productImage.product.id,
       productName: productImage.product.name
     };
+  }
+
+  private convertBufferToBase64(buffer: Buffer): string {
+    return buffer.toString('base64');
   }
 
   private async downloadImageAsBase64(url: string): Promise<string> {

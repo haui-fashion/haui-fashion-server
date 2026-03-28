@@ -10,12 +10,7 @@ export class VirtualTryOnDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  userImageBase64: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsOptional()
-  userImageMimeType?: string;
+  productName: string;
 
   @ApiProperty()
   @IsString()

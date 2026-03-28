@@ -65,9 +65,10 @@ export class GeminiImageService {
     clothingMimeType: string,
     modelImageBase64: string,
     modelMimeType: string,
-    garmentType?: string
+    garmentType?: string,
+    productName?: string
   ): Promise<ImageGenerationResult> {
-    const prompt = this.buildVtonPrompt(garmentType);
+    const prompt = this.buildVtonPrompt(garmentType, productName);
 
     const contents = [
       { text: prompt },
@@ -96,15 +97,21 @@ export class GeminiImageService {
     return this.extractImageFromResponse(response);
   }
 
-  private buildVtonPrompt(garmentType?: string): string {
+  private buildVtonPrompt(garmentType?: string, productName?: string): string {
     const garmentHint = garmentType
       ? `Sản phẩm thời trang là: ${garmentType}.`
       : 'Hãy xác định loại sản phẩm thời trang (áo, quần, váy, áo khoác, giày, phụ kiện, v.v.) từ hình ảnh thứ nhất.';
+
+    const productNameHint = productName
+      ? `Tên sản phẩm cần thử: ${productName}. Hãy ưu tiên hiểu đúng vị trí và phạm vi của món đồ này khi ghép lên người mẫu.`
+      : 'Nếu có nhiều item trong ảnh sản phẩm, hãy ưu tiên item chính đang được mô tả để ghép thử đồ.';
 
     return [
       'Bạn là một hệ thống thử đồ ảo (virtual try-on) chuyên nghiệp cho nền tảng thương mại điện tử thời trang.',
       '',
       'NHIỆM VỤ: Tạo ra duy nhất một hình ảnh chân thực (photorealistic) của người mẫu (hình ảnh thứ hai) đang mặc sản phẩm thời trang (hình ảnh thứ nhất).',
+      '',
+      `${productNameHint}`,
       '',
       `${garmentHint}`,
       '',
