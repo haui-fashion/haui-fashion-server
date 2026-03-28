@@ -5,16 +5,46 @@ import { BaseRepository } from '@core/utilities/repositories';
 import { Injectable } from '@nestjs/common';
 import { Cart, CartItem, Prisma } from '@prisma/client';
 
+const cartItemInclude = Prisma.validator<Prisma.CartItemInclude>()({
+  variant: {
+    include: {
+      product: {
+        include: {
+          images: {
+            include: {
+              file: true
+            },
+            orderBy: [
+              { isPrimary: 'desc' },
+              { position: 'asc' },
+              { createdAt: 'asc' }
+            ]
+          }
+        }
+      },
+      sizeOptionValue: true,
+      colorOptionValue: {
+        include: {
+          images: {
+            include: {
+              file: true
+            },
+            orderBy: [
+              { isPrimary: 'desc' },
+              { position: 'asc' },
+              { createdAt: 'asc' }
+            ]
+          }
+        }
+      }
+    }
+  }
+});
+
 type CartWithItems = Prisma.CartGetPayload<{
   include: {
     items: {
-      include: {
-        variant: {
-          include: {
-            product: true;
-          };
-        };
-      };
+      include: typeof cartItemInclude;
     };
   };
 }>;
@@ -23,20 +53,10 @@ type CartItemWithVariant = Prisma.CartItemGetPayload<{
   include: {
     cart: true;
     variant: {
-      include: {
-        product: true;
-      };
+      include: typeof cartItemInclude.variant.include;
     };
   };
 }>;
-
-const cartItemInclude = {
-  variant: {
-    include: {
-      product: true
-    }
-  }
-} as const;
 
 @Injectable()
 export class CartRepository extends BaseRepository<CartEntity, Cart> {
@@ -85,9 +105,7 @@ export class CartRepository extends BaseRepository<CartEntity, Cart> {
       include: {
         cart: true,
         variant: {
-          include: {
-            product: true
-          }
+          include: cartItemInclude.variant.include
         }
       }
     }) as Promise<CartItemWithVariant | null>;

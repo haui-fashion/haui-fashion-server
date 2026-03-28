@@ -1,6 +1,6 @@
 import { OllamaIntent } from '@core/modules/ollama/interfaces/intent-router.interface';
 
-export const CHATBOT_TOOL_CALLING_MAX_ITERATIONS = 5;
+export const CHATBOT_TOOL_CALLING_MAX_ITERATIONS = 2;
 
 export const CHATBOT_INTENT_TOOL_MODE: Record<
   OllamaIntent,

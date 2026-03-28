@@ -10,6 +10,7 @@ import { GetListOrdersHandler } from '@components/chatbot/tools-handler/get-list
 import { GetPolicyHandler } from '@components/chatbot/tools-handler/get-policy.handler';
 import { GetProductDetailHandler } from '@components/chatbot/tools-handler/get-product-detail.handler';
 import { SearchProductsHandler } from '@components/chatbot/tools-handler/search-products.handler';
+import { EmbeddingService } from '@core/modules/embedding';
 import { Module } from '@nestjs/common';
 
 @Module({
@@ -25,7 +26,8 @@ import { Module } from '@nestjs/common';
     CheckOrderStatusHandler,
     GetListOrdersHandler,
     GetFaqHandler,
-    GetPolicyHandler
+    GetPolicyHandler,
+    EmbeddingService
   ],
   exports: [
     ChatbotToolCatalogService,

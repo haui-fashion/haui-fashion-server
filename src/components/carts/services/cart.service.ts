@@ -204,8 +204,22 @@ export class CartService {
       totalAmount: totalAmount.toFixed(2),
       items: cart.items.map((item) => {
         const unitPrice = new Prisma.Decimal(item.variant.price);
+        const variantImages = item.variant.colorOptionValue?.images ?? [];
+        const productImages = item.variant.product?.images ?? [];
+
         return {
           ...item,
+          variant: {
+            ...item.variant,
+            size: item.variant.sizeOptionValue?.value ?? '',
+            color: item.variant.colorOptionValue?.value ?? '',
+            hexColor: item.variant.colorOptionValue?.hexColor ?? null,
+            images: variantImages,
+            product: {
+              ...item.variant.product,
+              images: productImages
+            }
+          },
           lineAmount: unitPrice.mul(item.quantity).toFixed(2)
         };
       })

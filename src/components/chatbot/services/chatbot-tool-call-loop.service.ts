@@ -93,13 +93,11 @@ export class ChatbotToolCallLoopService {
         };
       }
 
-      // Push complete model response content (preserving thoughtSignature)
       const modelContent = result.candidates?.[0]?.content;
       if (modelContent) {
         contents.push(modelContent);
       }
 
-      // Execute all function calls in parallel
       const executionTasks = functionCalls.map(async (functionCall) => {
         const functionName = (functionCall.name || '').trim();
 
@@ -138,7 +136,6 @@ export class ChatbotToolCallLoopService {
 
       const executionResults = await Promise.all(executionTasks);
 
-      // Build function response parts and log tool calls
       const functionResponseParts: Part[] = [];
 
       for (const execution of executionResults) {
@@ -165,7 +162,6 @@ export class ChatbotToolCallLoopService {
       });
     }
 
-    // After max iterations, make one final call with mode NONE to force text response
     this.logger.warn(
       `Function calling loop reached max iterations (${maxIterations}), forcing text response`
     );

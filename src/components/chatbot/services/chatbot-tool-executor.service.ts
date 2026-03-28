@@ -31,12 +31,27 @@ export class ChatbotToolExecutorService {
     private readonly getPolicyHandler: GetPolicyHandler
   ) {
     this.toolHandlers = new Map<string, ToolHandler>([
-      ['search_products', this.searchProductHandler.execute.bind(this)],
-      ['get_product_detail', this.getProductDetailHandler.execute.bind(this)],
-      ['check_order_status', this.checkOrderStatusHandler.execute.bind(this)],
-      ['list_user_orders', this.getListOrdersHandler.execute.bind(this)],
-      ['get_faq_answer', this.getFaqHandler.execute.bind(this)],
-      ['get_policy_content', this.getPolicyHandler.execute.bind(this)]
+      [
+        'search_products',
+        this.searchProductHandler.execute.bind(this.searchProductHandler)
+      ],
+      [
+        'get_product_detail',
+        this.getProductDetailHandler.execute.bind(this.getProductDetailHandler)
+      ],
+      [
+        'check_order_status',
+        this.checkOrderStatusHandler.execute.bind(this.checkOrderStatusHandler)
+      ],
+      [
+        'list_user_orders',
+        this.getListOrdersHandler.execute.bind(this.getListOrdersHandler)
+      ],
+      ['get_faq_answer', this.getFaqHandler.execute.bind(this.getFaqHandler)],
+      [
+        'get_policy_content',
+        this.getPolicyHandler.execute.bind(this.getPolicyHandler)
+      ]
     ]);
   }
 

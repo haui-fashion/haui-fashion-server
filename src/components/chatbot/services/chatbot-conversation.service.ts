@@ -93,7 +93,9 @@ export class ChatbotConversationService {
       }
     });
 
-    for (const chunk of this.chunkAnswer(result.answer)) {
+    const chunks = this.chunkAnswer(result.answer);
+
+    for (const [, chunk] of chunks.entries()) {
       observer.next({
         type: 'delta',
         data: {
@@ -148,8 +150,14 @@ export class ChatbotConversationService {
       }
     });
 
-    const intent =
-      await this.ollamaIntentRouterService.routeIntent(normalizedMessage);
+    const intent = await this.ollamaIntentRouterService.routeIntent(
+      `History: ${history
+        .map(
+          (turn) =>
+            `${turn.role === 'user' ? 'User' : 'Assistant'}: ${turn.content}`
+        )
+        .join('\n')}\nCurrent message: ${normalizedMessage}`
+    );
 
     const assistantResult =
       intent.intent === 'OUT_OF_SCOPE'
@@ -347,7 +355,9 @@ export class ChatbotConversationService {
   private chunkAnswer(answer: string): string[] {
     const normalized = answer.trim();
     if (!normalized) {
-      return ['Xin loi, minh chua co cau tra loi phu hop luc nay.'];
+      return [
+        'Xin lỗi, mình chưa có câu trả lời phù hợp cho câu hỏi của bạn. Bạn có thể thử diễn đạt lại hoặc cung cấp thêm thông tin chi tiết không?'
+      ];
     }
 
     const chunks: string[] = [];
@@ -396,7 +406,7 @@ export class ChatbotConversationService {
       }
     }
 
-    return Array.from(cards.values()).slice(0, 8);
+    return Array.from(cards.values()).slice(0, 3);
   }
 
   private toProductCard(product: Record<string, unknown>): ProductCardPayload {
@@ -405,17 +415,53 @@ export class ChatbotConversationService {
     const file = this.asRecord(firstImage?.file);
 
     const variants = Array.isArray(product.variants) ? product.variants : [];
-    const firstVariant =
-      variants.length > 0 ? this.asRecord(variants[0]) : null;
+    const resolvedPrice = this.resolveProductPrice(product, variants);
 
     return {
       id: this.asString(product.id),
       name: this.asString(product.name),
       slug: this.asString(product.slug),
       brand: this.asString(product.brand),
-      price: this.asString(firstVariant?.price),
+      price: resolvedPrice,
       imageUrl: this.asString(file?.url)
     };
+  }
+
+  private resolveProductPrice(
+    product: Record<string, unknown>,
+    variants: unknown[]
+  ): string | undefined {
+    const minVariantPrice = this.asNumber(product.minVariantPrice);
+    const maxVariantPrice = this.asNumber(product.maxVariantPrice);
+
+    if (minVariantPrice != null && maxVariantPrice != null) {
+      return `${minVariantPrice}-${maxVariantPrice}`;
+    }
+
+    if (minVariantPrice != null) {
+      return String(minVariantPrice);
+    }
+
+    if (maxVariantPrice != null) {
+      return String(maxVariantPrice);
+    }
+
+    const prices = variants
+      .map((variant) => this.asRecord(variant))
+      .filter((variant): variant is Record<string, unknown> => variant != null)
+      .map((variant) => this.asNumber(variant.price))
+      .filter((price): price is number => price != null)
+      .sort((left, right) => left - right);
+
+    if (prices.length === 0) {
+      return undefined;
+    }
+
+    if (prices.length === 1) {
+      return String(prices[0]);
+    }
+
+    return `${prices[0]}-${prices[prices.length - 1]}`;
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {
@@ -436,6 +482,30 @@ export class ChatbotConversationService {
       return String(value);
     }
 
+    if (value && typeof value === 'object') {
+      const objectValue = value as { toString?: () => string };
+      if (typeof objectValue.toString === 'function') {
+        const normalized = objectValue.toString().trim();
+        if (normalized && normalized !== '[object Object]') {
+          return normalized;
+        }
+      }
+    }
+
     return undefined;
+  }
+
+  private asNumber(value: unknown): number | undefined {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : undefined;
+    }
+
+    const stringValue = this.asString(value);
+    if (!stringValue) {
+      return undefined;
+    }
+
+    const parsed = Number(stringValue);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
 }

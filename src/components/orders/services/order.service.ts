@@ -37,9 +37,19 @@ type CheckoutCartItem = {
     productId: string;
     product: {
       name: string;
+      images?: {
+        file: {
+          url: string;
+        };
+      }[];
     };
     colorOptionValue: {
       value: string;
+      images?: {
+        file: {
+          url: string;
+        };
+      }[];
     };
     sizeOptionValue: {
       value: string;
@@ -142,6 +152,10 @@ export class OrderService {
                     sku: item.variant.sku,
                     size: item.variant.sizeOptionValue.value,
                     color: item.variant.colorOptionValue.value,
+                    image:
+                      item.variant.colorOptionValue.images?.[0]?.file?.url ||
+                      item.variant.product.images?.[0]?.file?.url ||
+                      null,
                     unitPrice: new Prisma.Decimal(item.variant.price).toFixed(2)
                   }
                 }))
@@ -219,6 +233,10 @@ export class OrderService {
           productName: item.variant.product.name,
           size: item.variant.sizeOptionValue.value,
           color: item.variant.colorOptionValue.value,
+          image:
+            item.variant.colorOptionValue.images?.[0]?.file?.url ||
+            item.variant.product.images?.[0]?.file?.url ||
+            null,
           quantity: item.quantity,
           unitPrice: unitPrice.toFixed(2),
           lineAmount: unitPrice.mul(item.quantity).toFixed(2)
@@ -270,8 +288,22 @@ export class OrderService {
           include: {
             variant: {
               include: {
-                product: true,
-                colorOptionValue: true,
+                product: {
+                  include: {
+                    images: {
+                      where: { isPrimary: true },
+                      include: { file: true }
+                    }
+                  }
+                },
+                colorOptionValue: {
+                  include: {
+                    images: {
+                      take: 1,
+                      include: { file: true }
+                    }
+                  }
+                },
                 sizeOptionValue: true
               }
             }
