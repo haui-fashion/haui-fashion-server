@@ -1,25 +1,26 @@
 import {
   GEMINI_GENERATION_MODEL,
   GEMINI_MAX_OUTPUT_TOKENS,
-  GEMINI_MODEL_CONFIG_PATHS
+  GEMINI_MODEL_CONFIG_PATHS,
+  GEMINI_WORKLOAD,
+  GeminiWorkload
 } from '@core/modules/gemini/constants/gemini.constants';
 import {
   Content,
   GenerateContentConfig,
-  GenerateContentResponse,
-  GoogleGenAI
+  GenerateContentResponse
 } from '@google/genai';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GEMINI_CLIENT } from '../gemini.provider';
+import { GeminiExecutionService } from './gemini-execution.service';
 
 @Injectable()
 export class GeminiGenerationService {
   private readonly model: string;
 
   constructor(
-    @Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly geminiExecutionService: GeminiExecutionService
   ) {
     this.model =
       this.configService.get<string>(GEMINI_MODEL_CONFIG_PATHS.generation) ||
@@ -30,15 +31,20 @@ export class GeminiGenerationService {
     contents: string | Content[];
     model?: string;
     config?: GenerateContentConfig;
+    workload?: GeminiWorkload;
   }): Promise<GenerateContentResponse> {
-    return this.ai.models.generateContent({
-      model: params.model || this.model,
-      contents: params.contents,
-      config: {
-        tools: [],
-        maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
-        ...(params.config || {})
-      }
+    return this.geminiExecutionService.execute({
+      workload: params.workload || GEMINI_WORKLOAD.text,
+      operation: (client) =>
+        client.models.generateContent({
+          model: params.model || this.model,
+          contents: params.contents,
+          config: {
+            tools: [],
+            maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
+            ...(params.config || {})
+          }
+        })
     });
   }
 

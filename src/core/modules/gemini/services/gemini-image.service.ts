@@ -1,7 +1,8 @@
 import {
   GEMINI_DEFAULT_IMAGE_MIME_TYPE,
   GEMINI_IMAGE_MODEL,
-  GEMINI_MODEL_CONFIG_PATHS
+  GEMINI_MODEL_CONFIG_PATHS,
+  GEMINI_WORKLOAD
 } from '@core/modules/gemini/constants/gemini.constants';
 import { ImageGenerationResult } from '@core/modules/gemini/entities/image-generation-result.entity';
 import { Injectable, Logger } from '@nestjs/common';
@@ -24,6 +25,7 @@ export class GeminiImageService {
 
   async generateImage(prompt: string): Promise<ImageGenerationResult> {
     const response = await this.geminiGenerationService.generate({
+      workload: GEMINI_WORKLOAD.image,
       model: this.model,
       contents: prompt,
       config: {
@@ -50,6 +52,7 @@ export class GeminiImageService {
     ];
 
     const response = await this.geminiGenerationService.generate({
+      workload: GEMINI_WORKLOAD.image,
       model: this.model,
       contents: [{ role: 'user', parts: contents }],
       config: {
@@ -87,6 +90,7 @@ export class GeminiImageService {
     ];
 
     const response = await this.geminiGenerationService.generate({
+      workload: GEMINI_WORKLOAD.image,
       model: this.model,
       contents: [{ role: 'user', parts: contents }],
       config: {

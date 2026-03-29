@@ -13,3 +13,13 @@ export const GEMINI_MODEL_CONFIG_PATHS = {
 } as const;
 
 export const GEMINI_DEFAULT_IMAGE_MIME_TYPE = 'image/png';
+
+export const GEMINI_WORKLOAD = {
+  text: 'TEXT',
+  image: 'IMAGE',
+  embedding: 'EMBEDDING',
+  batch: 'BATCH'
+} as const;
+
+export type GeminiWorkload =
+  (typeof GEMINI_WORKLOAD)[keyof typeof GEMINI_WORKLOAD];

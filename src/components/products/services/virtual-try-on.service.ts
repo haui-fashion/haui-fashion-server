@@ -26,8 +26,6 @@ export class VirtualTryOnService {
       }
     });
 
-    console.log('productImage: ', JSON.stringify(productImage, null, 2));
-
     if (!productImage) {
       throw new NotFoundException(
         `Không tìm thấy ảnh sản phẩm với id ${dto.productImageId}`

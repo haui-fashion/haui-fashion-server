@@ -1,12 +1,12 @@
 import {
-  GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
   GEMINI_EMBEDDING_MODEL,
-  GEMINI_MODEL_CONFIG_PATHS
+  GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
+  GEMINI_MODEL_CONFIG_PATHS,
+  GEMINI_WORKLOAD
 } from '@core/modules/gemini/constants/gemini.constants';
-import { GoogleGenAI } from '@google/genai';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GEMINI_CLIENT } from '../gemini.provider';
+import { GeminiExecutionService } from './gemini-execution.service';
 
 @Injectable()
 export class GeminiEmbeddingService {
@@ -14,8 +14,8 @@ export class GeminiEmbeddingService {
   private readonly model: string;
 
   constructor(
-    @Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly geminiExecutionService: GeminiExecutionService
   ) {
     this.model =
       this.configService.get<string>(GEMINI_MODEL_CONFIG_PATHS.embedding) ||
@@ -23,13 +23,17 @@ export class GeminiEmbeddingService {
   }
 
   async embedText(text: string, taskType?: string): Promise<number[]> {
-    const response = await this.ai.models.embedContent({
-      model: this.model,
-      contents: text,
-      config: {
-        outputDimensionality: GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
-        ...(taskType && { taskType })
-      }
+    const response = await this.geminiExecutionService.execute({
+      workload: GEMINI_WORKLOAD.embedding,
+      operation: (client) =>
+        client.models.embedContent({
+          model: this.model,
+          contents: text,
+          config: {
+            outputDimensionality: GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
+            ...(taskType && { taskType })
+          }
+        })
     });
 
     const embedding = response.embeddings?.[0]?.values;
@@ -44,13 +48,17 @@ export class GeminiEmbeddingService {
   }
 
   async embedBatch(texts: string[], taskType?: string): Promise<number[][]> {
-    const response = await this.ai.models.embedContent({
-      model: this.model,
-      contents: texts,
-      config: {
-        outputDimensionality: GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
-        ...(taskType && { taskType })
-      }
+    const response = await this.geminiExecutionService.execute({
+      workload: GEMINI_WORKLOAD.embedding,
+      operation: (client) =>
+        client.models.embedContent({
+          model: this.model,
+          contents: texts,
+          config: {
+            outputDimensionality: GEMINI_EMBEDDING_OUTPUT_DIMENSIONALITY,
+            ...(taskType && { taskType })
+          }
+        })
     });
 
     const embeddings = response.embeddings?.map((e) => e.values ?? []);

@@ -1,15 +1,18 @@
+import { GEMINI_WORKLOAD } from '@core/modules/gemini/constants/gemini.constants';
 import { GoogleGenAI } from '@google/genai';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { GEMINI_CLIENT } from '../gemini.provider';
+import { GeminiExecutionService } from './gemini-execution.service';
 
 @Injectable()
 export class GeminiBatchService {
   private readonly logger = new Logger(GeminiBatchService.name);
 
-  constructor(@Inject(GEMINI_CLIENT) private readonly ai: GoogleGenAI) {}
+  constructor(
+    private readonly geminiExecutionService: GeminiExecutionService
+  ) {}
 
   async uploadJsonlFile(
     lines: Record<string, unknown>[],
@@ -36,12 +39,16 @@ export class GeminiBatchService {
       });
 
       this.logger.debug(`Uploading file to Gemini File API...`);
-      const uploadedFile = await this.ai.files.upload({
-        file: filePath,
-        config: {
-          mimeType: 'jsonl',
-          displayName
-        }
+      const uploadedFile = await this.geminiExecutionService.execute({
+        workload: GEMINI_WORKLOAD.batch,
+        operation: (client: GoogleGenAI) =>
+          client.files.upload({
+            file: filePath,
+            config: {
+              mimeType: 'jsonl',
+              displayName
+            }
+          })
       });
 
       this.logger.log(`Uploaded file to Gemini: ${uploadedFile.name}`);
@@ -68,10 +75,14 @@ export class GeminiBatchService {
     this.logger.debug(
       `Creating generation batch job with model: ${model}, file: ${fileRef}`
     );
-    const batchJob = await this.ai.batches.create({
-      model,
-      src: { fileName: fileRef },
-      config: { displayName }
+    const batchJob = await this.geminiExecutionService.execute({
+      workload: GEMINI_WORKLOAD.batch,
+      operation: (client: GoogleGenAI) =>
+        client.batches.create({
+          model,
+          src: { fileName: fileRef },
+          config: { displayName }
+        })
     });
 
     this.logger.log(`Created generation batch job: ${batchJob.name}`);
@@ -86,10 +97,14 @@ export class GeminiBatchService {
     this.logger.debug(
       `Creating embedding batch job with model: ${model}, file: ${fileRef}`
     );
-    const batchJob = await this.ai.batches.createEmbeddings({
-      model,
-      src: { fileName: fileRef },
-      config: { displayName }
+    const batchJob = await this.geminiExecutionService.execute({
+      workload: GEMINI_WORKLOAD.batch,
+      operation: (client: GoogleGenAI) =>
+        client.batches.createEmbeddings({
+          model,
+          src: { fileName: fileRef },
+          config: { displayName }
+        })
     });
 
     this.logger.log(`Created embedding batch job: ${batchJob.name}`);
@@ -97,7 +112,10 @@ export class GeminiBatchService {
   }
 
   async getBatchJob(name: string) {
-    return this.ai.batches.get({ name });
+    return this.geminiExecutionService.execute({
+      workload: GEMINI_WORKLOAD.batch,
+      operation: (client: GoogleGenAI) => client.batches.get({ name })
+    });
   }
 
   async downloadResultFile(fileName: string): Promise<string> {
@@ -108,7 +126,11 @@ export class GeminiBatchService {
     );
 
     try {
-      await this.ai.files.download({ file: fileName, downloadPath });
+      await this.geminiExecutionService.execute({
+        workload: GEMINI_WORKLOAD.batch,
+        operation: (client: GoogleGenAI) =>
+          client.files.download({ file: fileName, downloadPath })
+      });
       return fs.readFileSync(downloadPath, 'utf8');
     } finally {
       try {

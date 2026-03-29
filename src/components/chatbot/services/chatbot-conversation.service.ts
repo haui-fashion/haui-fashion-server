@@ -152,6 +152,7 @@ export class ChatbotConversationService {
 
     const intent = await this.ollamaIntentRouterService.routeIntent(
       `History: ${history
+        .slice(-this.memoryWindowSize)
         .map(
           (turn) =>
             `${turn.role === 'user' ? 'User' : 'Assistant'}: ${turn.content}`
