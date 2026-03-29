@@ -9,5 +9,5 @@ export const AppCacheKeys = {
 
 export const AppCacheTtl = {
   userInfo: 60 * 60 * 1000,
-  geminiBlockedKey: 60 * 1000
+  geminiBlockedKey: 2 * 60 * 1000
 };

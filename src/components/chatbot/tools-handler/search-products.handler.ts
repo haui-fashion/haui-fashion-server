@@ -29,7 +29,7 @@ export class SearchProductsHandler {
   ): Promise<ToolExecutionResult> {
     const startedAt = Date.now();
     const page = toPositiveInt(args.page, 1);
-    const limit = Math.min(toPositiveInt(args.limit, 12), 50);
+    const limit = Math.min(toPositiveInt(args.limit, 12), 30);
     const keyword = toOptionalString(args.keyword);
     const categoryNames = toStringArray(args.category_names);
     const brands = toStringArray(args.brands);

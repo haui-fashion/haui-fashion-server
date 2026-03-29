@@ -165,7 +165,8 @@ export class ChatbotConversationService {
         ? {
             answer:
               'Mình chỉ hỗ trợ các nội dung liên quan website thời trang như tìm sản phẩm, tư vấn size/màu, đơn hàng và chính sách mua sắm.',
-            toolCalls: []
+            toolCalls: [],
+            recommendedProductIds: [] as string[]
           }
         : await this.chatbotToolCallLoopService.run({
             intent: intent.intent,
@@ -179,7 +180,10 @@ export class ChatbotConversationService {
             }
           });
 
-    const productCards = this.extractProductCards(assistantResult.toolCalls);
+    const productCards = this.extractProductCards(
+      assistantResult.toolCalls,
+      assistantResult.recommendedProductIds
+    );
 
     await this.persistMessage({
       conversationId: conversation.id,
@@ -372,7 +376,8 @@ export class ChatbotConversationService {
   }
 
   private extractProductCards(
-    toolCalls: ToolInvocationLog[]
+    toolCalls: ToolInvocationLog[],
+    recommendedProductIds: string[]
   ): ProductCardPayload[] {
     const cards = new Map<string, ProductCardPayload>();
 
@@ -407,7 +412,13 @@ export class ChatbotConversationService {
       }
     }
 
-    return Array.from(cards.values()).slice(0, 3);
+    const allCards = Array.from(cards.values());
+
+    return recommendedProductIds?.length > 0
+      ? allCards.filter(
+          (card) => card.id && recommendedProductIds.includes(card.id)
+        )
+      : allCards.slice(0, 3);
   }
 
   private toProductCard(product: Record<string, unknown>): ProductCardPayload {

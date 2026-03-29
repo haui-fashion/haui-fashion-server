@@ -1,4 +1,8 @@
-import { CHATBOT_TOOL_CALLING_MAX_ITERATIONS } from '@components/chatbot/constants/chatbot-tooling.constants';
+import {
+  CHATBOT_TOOL_CALLING_MAX_ITERATIONS,
+  PRODUCT_IDS_INSTRUCTION,
+  PRODUCT_IDS_REGEX
+} from '@components/chatbot/constants/chatbot-tooling.constants';
 import {
   ChatHistoryTurn,
   GeminiToolLoopResult,
@@ -89,7 +93,8 @@ export class ChatbotToolCallLoopService {
       if (functionCalls.length === 0) {
         return {
           answer: result.text || 'Xin lỗi, tôi chưa thể trả lời lúc này.',
-          toolCalls
+          toolCalls,
+          recommendedProductIds: []
         };
       }
 
@@ -166,13 +171,29 @@ export class ChatbotToolCallLoopService {
       `Function calling loop reached max iterations (${maxIterations}), forcing text response`
     );
 
+    return this.generateFinalResponse(params, contents, toolCalls);
+  }
+
+  private async generateFinalResponse(
+    params: {
+      model?: string;
+      systemInstruction?: string;
+    },
+    contents: Content[],
+    toolCalls: ToolInvocationLog[]
+  ): Promise<GeminiToolLoopResult> {
+    const systemInstruction = [
+      params.systemInstruction || '',
+      PRODUCT_IDS_INSTRUCTION
+    ]
+      .filter(Boolean)
+      .join('\n');
+
     const finalResult = await this.geminiGenerationService.generate({
       model: params.model,
       contents,
       config: {
-        ...(params.systemInstruction && {
-          systemInstruction: params.systemInstruction
-        }),
+        systemInstruction,
         tools: [],
         toolConfig: {
           functionCallingConfig: {
@@ -182,11 +203,42 @@ export class ChatbotToolCallLoopService {
       }
     });
 
+    const rawText =
+      finalResult.text ||
+      'Xin lỗi, tôi cần thêm thời gian để xử lý yêu cầu này.';
+
+    const { answer, productIds } = this.parseProductIds(rawText);
+
     return {
-      answer:
-        finalResult.text ||
-        'Xin lỗi, tôi cần thêm thời gian để xử lý yêu cầu này.',
-      toolCalls
+      answer,
+      toolCalls,
+      recommendedProductIds: productIds
     };
+  }
+
+  private parseProductIds(rawText: string): {
+    answer: string;
+    productIds: string[];
+  } {
+    const match = PRODUCT_IDS_REGEX.exec(rawText);
+
+    if (!match) {
+      this.logger.warn(
+        'Gemini response did not include <<PRODUCT_IDS:[...]>> tag'
+      );
+      return { answer: rawText.trim(), productIds: [] };
+    }
+
+    const idsString = match[1].trim();
+    const productIds = idsString
+      ? idsString
+          .split(',')
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0)
+      : [];
+
+    const answer = rawText.replace(PRODUCT_IDS_REGEX, '').trim();
+
+    return { answer, productIds };
   }
 }

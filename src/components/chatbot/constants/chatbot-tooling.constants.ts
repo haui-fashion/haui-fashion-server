@@ -12,3 +12,14 @@ export const CHATBOT_INTENT_TOOL_MODE: Record<
   OUT_OF_SCOPE: 'NONE',
   UNKNOWN: 'AUTO'
 };
+
+export const PRODUCT_IDS_INSTRUCTION = [
+  '',
+  'QUAN TRỌNG: Trong phần trả lời, bạn PHẢI thêm một dòng cuối cùng có format chính xác như sau:',
+  '<<PRODUCT_IDS:[id1,id2,...]>>',
+  'Trong đó id1, id2, ... là danh sách Product.id (UUID) của các sản phẩm mà bạn thực sự đề cập/gợi ý trong câu trả lời.',
+  'Nếu không có sản phẩm nào được đề cập, hãy ghi: <<PRODUCT_IDS:[]>>',
+  'Dòng này sẽ bị ẩn khỏi người dùng, chỉ dùng để hệ thống xử lý.'
+].join('\n');
+
+export const PRODUCT_IDS_REGEX = /<<PRODUCT_IDS:\[([^\]]*)\]>>/;

@@ -72,6 +72,7 @@ export interface ToolInvocationLog {
 export interface GeminiToolLoopResult {
   answer: string;
   toolCalls: ToolInvocationLog[];
+  recommendedProductIds: string[];
 }
 
 export interface ChatHistoryTurn {
