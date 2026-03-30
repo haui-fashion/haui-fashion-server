@@ -53,6 +53,10 @@ type RankedProductItem = {
   score: number;
 };
 
+type CategoryTreeIdRow = {
+  id: string;
+};
+
 type VariantSummary = {
   numberOfVariants: number;
   minVariantPrice: number | null;
@@ -202,16 +206,24 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
     }
 
     if (categorySlug) {
-      const existingAnd = Array.isArray(where.AND)
-        ? where.AND
-        : where.AND
-          ? [where.AND]
-          : [];
+      const categoryTreeIds =
+        await this.findCategoryTreeIdsBySlug(categorySlug);
 
-      where.AND = [
-        ...existingAnd,
-        { category: { slug: categorySlug } }
-      ] as Prisma.ProductWhereInput[];
+      if (categoryTreeIds.length === 0) {
+        return {
+          items: [],
+          meta: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0
+          }
+        };
+      }
+
+      where.categoryId = {
+        in: categoryTreeIds
+      };
     }
 
     if (filter && filter.length > 0) {
@@ -468,6 +480,30 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
       { brand: { contains: search, mode: 'insensitive' } },
       { descriptionHtml: { contains: search, mode: 'insensitive' } }
     ];
+  }
+
+  private async findCategoryTreeIdsBySlug(slug: string): Promise<string[]> {
+    const normalizedSlug = slug.trim();
+
+    if (!normalizedSlug) return [];
+
+    const rows = await this.prisma.$queryRaw<CategoryTreeIdRow[]>`
+      WITH RECURSIVE category_tree AS (
+        SELECT c.id
+        FROM categories c
+        WHERE c.slug = ${normalizedSlug}
+
+        UNION ALL
+
+        SELECT child.id
+        FROM categories child
+        INNER JOIN category_tree parent ON child.parent_id = parent.id
+      )
+      SELECT id
+      FROM category_tree;
+    `;
+
+    return rows.map((row) => row.id);
   }
 
   private toVectorLiteral(embedding: number[]): string {

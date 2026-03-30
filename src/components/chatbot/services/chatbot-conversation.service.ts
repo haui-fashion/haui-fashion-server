@@ -1,3 +1,4 @@
+import { QueryAdminChatConversationsDto } from '@components/chatbot/dtos/query-admin-chat-conversations.dto';
 import {
   ChatHistoryTurn,
   ToolInvocationLog
@@ -6,6 +7,7 @@ import { ChatbotToolCallLoopService } from '@components/chatbot/services/chatbot
 import { AppCacheService } from '@core/modules/app-cache/services/app-cache.service';
 import { OllamaIntentRouterService } from '@core/modules/ollama/services/ollama-intent-router.service';
 import { PrismaService } from '@core/modules/prisma';
+import { PaginatedData } from '@core/utilities/interceptors';
 import {
   BadRequestException,
   Injectable,
@@ -42,11 +44,34 @@ export interface PromptChatResult {
   products: ProductCardPayload[];
 }
 
+export interface AdminChatMessageItem {
+  id: string;
+  role: ChatMessageRole;
+  content: string;
+  intent: string | null;
+  products?: ProductCardPayload[];
+  createdAt: Date;
+}
+
+export interface AdminChatConversationItem {
+  id: string;
+  sessionId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user: {
+    id: string;
+    fullname: string;
+    email: string;
+  } | null;
+  messages: AdminChatMessageItem[];
+}
+
 @Injectable()
 export class ChatbotConversationService {
   private readonly logger = new Logger(ChatbotConversationService.name);
   private readonly memoryWindowSize = 12;
   private readonly memoryTtlSeconds = 30 * 60;
+  private readonly adminMessageWindowSize = 120;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -73,6 +98,126 @@ export class ChatbotConversationService {
 
   async promptChat(input: StreamChatInput): Promise<PromptChatResult> {
     return this.executeConversation(input);
+  }
+
+  async findConversationsForAdmin(
+    query: QueryAdminChatConversationsDto
+  ): Promise<PaginatedData<AdminChatConversationItem>> {
+    const page = query.pagination?.page ?? 1;
+    const limit = query.pagination?.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const search = query.search?.trim();
+
+    const where: Prisma.ChatConversationWhereInput = {};
+
+    if (search) {
+      where.OR = [
+        {
+          sessionKey: {
+            contains: search,
+            mode: 'insensitive'
+          }
+        },
+        {
+          user: {
+            is: {
+              fullname: {
+                contains: search,
+                mode: 'insensitive'
+              }
+            }
+          }
+        },
+        {
+          user: {
+            is: {
+              email: {
+                contains: search,
+                mode: 'insensitive'
+              }
+            }
+          }
+        },
+        {
+          messages: {
+            some: {
+              content: {
+                contains: search,
+                mode: 'insensitive'
+              },
+              role: {
+                in: [ChatMessageRole.USER, ChatMessageRole.ASSISTANT]
+              }
+            }
+          }
+        }
+      ];
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.chatConversation.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          updatedAt: 'desc'
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullname: true,
+              email: true
+            }
+          },
+          messages: {
+            where: {
+              role: {
+                in: [ChatMessageRole.USER, ChatMessageRole.ASSISTANT]
+              }
+            },
+            orderBy: {
+              createdAt: 'desc'
+            },
+            take: this.adminMessageWindowSize
+          }
+        }
+      }),
+      this.prisma.chatConversation.count({ where })
+    ]);
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        sessionId: row.sessionKey,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        user: row.user
+          ? {
+              id: row.user.id,
+              fullname: row.user.fullname,
+              email: row.user.email
+            }
+          : null,
+        messages: row.messages
+          .slice()
+          .reverse()
+          .map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            intent: message.intent,
+            products: this.parseProductPayload(message.productPayload),
+            createdAt: message.createdAt
+          }))
+      })),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
   }
 
   private async handleChatFlow(
@@ -419,6 +564,39 @@ export class ChatbotConversationService {
           (card) => card.id && recommendedProductIds.includes(card.id)
         )
       : allCards.slice(0, 3);
+  }
+
+  private parseProductPayload(
+    payload: Prisma.JsonValue | null
+  ): ProductCardPayload[] {
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+
+    return payload
+      .map((item) => this.asRecord(item))
+      .filter((item): item is Record<string, unknown> => item != null)
+      .map((item) => {
+        const id = typeof item.id === 'string' ? item.id : undefined;
+        const name = typeof item.name === 'string' ? item.name : undefined;
+        const slug = typeof item.slug === 'string' ? item.slug : undefined;
+        const brand =
+          item.brand == null || typeof item.brand === 'string'
+            ? item.brand
+            : undefined;
+        const price = typeof item.price === 'string' ? item.price : undefined;
+        const imageUrl =
+          typeof item.imageUrl === 'string' ? item.imageUrl : undefined;
+
+        return {
+          id,
+          name,
+          slug,
+          brand,
+          price,
+          imageUrl
+        };
+      });
   }
 
   private toProductCard(product: Record<string, unknown>): ProductCardPayload {

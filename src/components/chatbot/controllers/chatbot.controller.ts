@@ -1,5 +1,6 @@
 import { ChatPromptDto } from '@components/chatbot/dtos/chat-prompt.dto';
 import { ChatStreamQueryDto } from '@components/chatbot/dtos/chat-stream-query.dto';
+import { QueryAdminChatConversationsDto } from '@components/chatbot/dtos/query-admin-chat-conversations.dto';
 import {
   ChatbotConversationService,
   PromptChatResult
@@ -7,18 +8,21 @@ import {
 import {
   CurrentUser,
   CurrentUserDto,
-  Public
+  Public,
+  Roles
 } from '@core/utilities/decorators';
 import { SkipTransformResponse } from '@core/utilities/interceptors';
 import {
   Body,
   Controller,
+  Get,
   MessageEvent,
   Post,
   Query,
   Sse
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import { Observable } from 'rxjs';
 
 @ApiTags('Chatbot')
@@ -57,5 +61,14 @@ export class ChatbotController {
       ...query,
       userId: user?.userId
     });
+  }
+
+  @Get('admin/conversations')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Admin list chatbot conversations with transcript'
+  })
+  findAllForAdmin(@Query() query: QueryAdminChatConversationsDto) {
+    return this.chatbotConversationService.findConversationsForAdmin(query);
   }
 }

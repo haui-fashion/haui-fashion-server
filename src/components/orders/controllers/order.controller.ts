@@ -60,30 +60,6 @@ export class OrderController {
     return this.orderService.findMyOrders(user.userId);
   }
 
-  @Get('admin')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Admin list orders with pagination and filters' })
-  async findAllForAdmin(@Query() query: QueryOrderDto) {
-    return this.orderService.findAllForAdmin(query);
-  }
-
-  @Get('admin/:id')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Admin get one order by id' })
-  async findByIdForAdmin(@Param('id') id: string) {
-    return this.orderService.findByIdForAdmin(id);
-  }
-
-  @Patch('admin/:id/status')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Admin update order status' })
-  async updateStatusForAdmin(
-    @Param('id') id: string,
-    @Body() dto: UpdateOrderStatusDto
-  ) {
-    return this.orderService.updateStatusForAdmin(id, dto);
-  }
-
   @Get(':id')
   @ApiOperation({ summary: 'Get one current user order by id' })
   async findMyOrderById(
@@ -109,5 +85,29 @@ export class OrderController {
   })
   vnpayReturn(@Query() query: Record<string, string>) {
     return this.orderService.handleVnpayReturn(query);
+  }
+
+  @Get('admin')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin list orders with pagination and filters' })
+  async findAllForAdmin(@Query() query: QueryOrderDto) {
+    return this.orderService.findAllForAdmin(query);
+  }
+
+  @Get('admin/:id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin get one order by id' })
+  async findByIdForAdmin(@Param('id') id: string) {
+    return this.orderService.findByIdForAdmin(id);
+  }
+
+  @Patch('admin/:id/status')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin update order status' })
+  async updateStatusForAdmin(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderStatusDto
+  ) {
+    return this.orderService.updateStatusForAdmin(id, dto);
   }
 }
