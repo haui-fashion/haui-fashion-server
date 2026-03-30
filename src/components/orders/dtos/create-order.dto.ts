@@ -7,9 +7,12 @@ import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
+  IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsUUID,
+  Min,
   ValidateNested
 } from 'class-validator';
 
@@ -34,4 +37,23 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => CheckoutOrderItemDto)
   items?: CheckoutOrderItemDto[];
+
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'ID dịch vụ vận chuyển GHN'
+  })
+  @Label('ID dịch vụ vận chuyển')
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  serviceId?: number;
+
+  @ApiPropertyOptional({ type: Number, description: 'Service type ID GHN' })
+  @Label('Service type ID vận chuyển')
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  serviceTypeId?: number;
 }

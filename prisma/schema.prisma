@@ -143,7 +143,7 @@ model Address {
   provinceName String  @map("province_name")
   districtId   Int?    @map("district_id")
   districtName String  @map("district_name")
-  wardCode     Int? @map("ward_code")
+  wardCode     String? @map("ward_code")
   wardName     String  @map("ward_name")
   street       String
   isDefault    Boolean @default(false) @map("is_default")
@@ -185,7 +185,7 @@ model Product {
   category   Category? @relation(fields: [categoryId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
 
   options  ProductOption[]
   variants Variant[]

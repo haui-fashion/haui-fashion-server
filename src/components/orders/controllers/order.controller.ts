@@ -3,7 +3,11 @@ import { PreviewOrderDto } from '@components/orders/dtos/preview-order.dto';
 import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderService } from '@components/orders/services/order.service';
-import { CurrentUser, CurrentUserDto } from '@core/utilities/decorators';
+import {
+  CurrentUser,
+  CurrentUserDto,
+  Public
+} from '@core/utilities/decorators';
 import { Roles } from '@core/utilities/decorators/roles.decorator';
 import {
   Body,
@@ -12,10 +16,13 @@ import {
   Param,
   Patch,
   Post,
-  Query
+  Query,
+  Req
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { Record } from '@prisma/client/runtime/library';
+import { Request } from 'express';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
@@ -27,9 +34,15 @@ export class OrderController {
   @ApiOperation({ summary: 'Create an order from current cart' })
   async checkout(
     @CurrentUser() user: CurrentUserDto,
-    @Body() dto: CreateOrderDto
+    @Body() dto: CreateOrderDto,
+    @Req() req: Request
   ) {
-    return this.orderService.createFromMyCart(user.userId, dto);
+    const ipAddr =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.ip ||
+      '127.0.0.1';
+
+    return this.orderService.createFromMyCart(user.userId, dto, ipAddr);
   }
 
   @Post('preview')
@@ -78,5 +91,23 @@ export class OrderController {
     @Param('id') id: string
   ) {
     return this.orderService.findMyOrderById(id, user.userId);
+  }
+
+  @Public()
+  @Get('vnpay-ipn')
+  @ApiOperation({
+    summary: 'VNPay IPN callback (server-to-server, no auth required)'
+  })
+  async vnpayIpn(@Query() query: Record<string, string>) {
+    return this.orderService.handleVnpayIpn(query);
+  }
+
+  @Public()
+  @Get('vnpay-return')
+  @ApiOperation({
+    summary: 'VNPay return URL handler (no auth required)'
+  })
+  vnpayReturn(@Query() query: Record<string, string>) {
+    return this.orderService.handleVnpayReturn(query);
   }
 }

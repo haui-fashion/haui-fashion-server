@@ -1,4 +1,5 @@
 import { GetShippingFeeDto } from '@components/shipping/dtos/get-shipping-fee.dto';
+import { GetShippingServiceDto } from '@components/shipping/dtos/get-shipping-service.dto';
 import { ShippingService } from '@components/shipping/services/shipping.serivce';
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -26,6 +27,12 @@ export class ShippingController {
   @ApiQuery({ name: 'districtId', required: true, type: Number })
   async getWards(@Query('districtId') districtId: string) {
     return this.shippingService.getWards(Number(districtId));
+  }
+
+  @Get('shipping-services')
+  @ApiOperation({ summary: 'Lấy danh sách dịch vụ vận chuyển từ GHN' })
+  async getShippingServices(@Query() dto: GetShippingServiceDto) {
+    return this.shippingService.getShippingServices(dto);
   }
 
   @Get('shipping-fee')

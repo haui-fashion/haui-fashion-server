@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class GetShippingFeeDto {
   @ApiProperty()
@@ -15,4 +15,21 @@ export class GetShippingFeeDto {
   @ApiProperty()
   @IsString()
   toDistrictId: string;
+
+  @ApiProperty()
+  @IsNumber()
+  @Type(() => Number)
+  codValue: number;
+
+  @ApiProperty()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  serviceTypeId: number;
+
+  @ApiProperty()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  serviceId: number;
 }

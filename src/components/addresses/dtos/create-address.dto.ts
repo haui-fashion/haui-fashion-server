@@ -43,9 +43,8 @@ export class CreateAddressDto {
 
   @Label('Mã phường/xã')
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  wardCode?: number;
+  @IsString()
+  wardCode?: string;
 
   @Label('Tên phường/xã')
   @IsNotEmpty()

@@ -1,5 +1,5 @@
 export type HttpClientRequestOptions = {
-  headers?: Record<string, string>;
+  headers?: Record<string, string | number>;
   params?: Record<string, unknown>;
   timeoutMs?: number;
 };

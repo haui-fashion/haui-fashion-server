@@ -71,7 +71,7 @@ export default () => {
         apiToken: process.env.GHN_API_TOKEN,
         baseUrl: 'https://dev-online-gateway.ghn.vn/shiip/',
         timeoutMs: parseInt(process.env.GHN_API_TIMEOUT_MS || '5000', 10),
-        shopId: process.env.GHN_SHOP_ID
+        shopId: +(process.env.GHN_SHOP_ID || 10000)
       }
     },
     ollama: {
@@ -105,6 +105,14 @@ export default () => {
       timeoutMs: parseInt(process.env.HTTP_CLIENT_TIMEOUT_MS || '5000', 10),
       maxRedirects: parseInt(process.env.HTTP_CLIENT_MAX_REDIRECTS || '5', 10),
       maxSockets: parseInt(process.env.HTTP_CLIENT_MAX_SOCKETS || '50', 10)
+    },
+    vnpay: {
+      tmnCode: process.env.VNPAY_TMN_CODE || '',
+      hashSecret: process.env.VNPAY_HASH_SECRET || '',
+      paymentUrl:
+        process.env.VNPAY_PAYMENT_URL ||
+        'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
+      returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:3000/orders'
     }
   };
 };

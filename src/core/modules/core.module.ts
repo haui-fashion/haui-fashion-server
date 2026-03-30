@@ -15,6 +15,7 @@ import { AppMailModule } from '@core/modules/mail/mail.module';
 import { OllamaModule } from '@core/modules/ollama';
 import { PrismaModule } from '@core/modules/prisma';
 import { TiptapModule } from '@core/modules/tiptap';
+import { VNPayModule } from '@core/modules/vnpay';
 import { AppExceptionFilter } from '@core/utilities/filters';
 import {
   LoggingInterceptor,
@@ -47,6 +48,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     OllamaModule,
     ScheduleModule.forRoot(),
     TiptapModule,
+    VNPayModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -92,6 +94,6 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
       })
     }
   ],
-  exports: [AppConfigModule, AppBullModule, LoggerModule]
+  exports: [AppConfigModule, AppBullModule, LoggerModule, VNPayModule]
 })
 export class CoreModule {}

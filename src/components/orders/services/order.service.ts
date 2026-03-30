@@ -12,10 +12,12 @@ import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-statu
 import { OrderRepository } from '@components/orders/repositories/order.repository';
 import { ShippingService } from '@components/shipping/services/shipping.serivce';
 import { EntityCodeService, PrismaService } from '@core/modules/prisma';
+import { VNPayService } from '@core/modules/vnpay';
 import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException
 } from '@nestjs/common';
 import {
@@ -59,18 +61,24 @@ type CheckoutCartItem = {
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderRepository: OrderRepository,
     private readonly entityCodeService: EntityCodeService,
-    private readonly shippingService: ShippingService
+    private readonly shippingService: ShippingService,
+    private readonly vnpayService: VNPayService
   ) {}
 
-  async createFromMyCart(userId: string, dto: CreateOrderDto) {
+  async createFromMyCart(userId: string, dto: CreateOrderDto, ipAddr?: string) {
     const checkoutContext = await this.buildCheckoutContext(
       userId,
       dto.addressId,
-      dto.items
+      dto.items,
+      {
+        paymentMethod: dto.paymentMethod
+      }
     );
 
     const {
@@ -84,6 +92,14 @@ export class OrderService {
     } = checkoutContext;
 
     const paymentMethod = dto.paymentMethod ?? PaymentMethod.COD;
+    const initialOrderStatus =
+      paymentMethod === PaymentMethod.COD
+        ? OrderStatus.PAID
+        : OrderStatus.PENDING;
+    const initialPaymentStatus =
+      paymentMethod === PaymentMethod.COD
+        ? PaymentStatus.SUCCESS
+        : PaymentStatus.PENDING;
 
     for (let attempt = 0; attempt < MAX_CODE_GENERATION_RETRIES; attempt++) {
       const orderCode =
@@ -140,6 +156,7 @@ export class OrderService {
               totalProductAmount,
               shippingFee,
               totalAmount,
+              status: initialOrderStatus,
               items: {
                 create: checkoutItems.map((item) => ({
                   variantId: item.variantId,
@@ -164,7 +181,7 @@ export class OrderService {
                 create: {
                   code: paymentCode,
                   method: paymentMethod,
-                  status: PaymentStatus.PENDING,
+                  status: initialPaymentStatus,
                   amount: totalAmount
                 }
               }
@@ -202,6 +219,18 @@ export class OrderService {
           return order;
         });
 
+        // Generate VNPay payment URL if payment method is VNPAY
+        if (paymentMethod === PaymentMethod.VNPAY && created.payment) {
+          const paymentUrl = this.vnpayService.createPaymentUrl({
+            ipAddr: ipAddr || '127.0.0.1',
+            txnRef: created.payment.code,
+            amount: Number(totalAmount),
+            orderInfo: `Thanh toan don hang ${orderCode}`
+          });
+
+          return { ...created, paymentUrl };
+        }
+
         return created;
       } catch (error) {
         if (!this.isCodeConflictError(error)) {
@@ -215,9 +244,143 @@ export class OrderService {
     );
   }
 
+  /**
+   * Handle VNPay IPN (Instant Payment Notification) callback.
+   * This is called server-to-server by VNPay.
+   */
+  async handleVnpayIpn(
+    query: Record<string, string>
+  ): Promise<{ RspCode: string; Message: string }> {
+    const { isValid, vnpParams } = this.vnpayService.verifySecureHash(query);
+
+    if (!isValid) {
+      return { RspCode: '97', Message: 'Invalid signature' };
+    }
+
+    const txnRef = vnpParams['vnp_TxnRef'];
+    const vnpAmount = Number(vnpParams['vnp_Amount']) / 100;
+    const responseCode = vnpParams['vnp_ResponseCode'];
+    const transactionStatus = vnpParams['vnp_TransactionStatus'];
+    const transactionNo = vnpParams['vnp_TransactionNo'];
+
+    try {
+      // Find payment by code (txnRef = payment.code)
+      const payment = await this.prisma.payment.findUnique({
+        where: { code: txnRef },
+        include: { order: true }
+      });
+
+      if (!payment) {
+        this.logger.warn(`VNPay IPN: Payment not found for txnRef=${txnRef}`);
+        return { RspCode: '01', Message: 'Order not found' };
+      }
+
+      // Verify amount
+      const paymentAmount = Number(payment.amount);
+      if (Math.round(paymentAmount) !== Math.round(vnpAmount)) {
+        this.logger.warn(
+          `VNPay IPN: Amount mismatch for txnRef=${txnRef}. ` +
+            `Expected=${paymentAmount}, Got=${vnpAmount}`
+        );
+        return { RspCode: '04', Message: 'Invalid amount' };
+      }
+
+      // Check if already processed (idempotency)
+      if (payment.status !== PaymentStatus.PENDING) {
+        this.logger.log(
+          `VNPay IPN: Payment already confirmed for txnRef=${txnRef}`
+        );
+        return { RspCode: '02', Message: 'Order already confirmed' };
+      }
+
+      // Update payment and order status based on VNPay response
+      const isSuccess = responseCode === '00' && transactionStatus === '00';
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: isSuccess ? PaymentStatus.SUCCESS : PaymentStatus.FAILED,
+            providerTransactionId: transactionNo || undefined
+          }
+        });
+
+        if (isSuccess) {
+          await tx.order.update({
+            where: { id: payment.orderId },
+            data: { status: OrderStatus.PAID }
+          });
+        } else {
+          // Restore stock on failed payment
+          const orderItems = await tx.orderItem.findMany({
+            where: { orderId: payment.orderId }
+          });
+
+          for (const item of orderItems) {
+            await tx.variant.update({
+              where: { id: item.variantId },
+              data: { stock: { increment: item.quantity } }
+            });
+          }
+
+          await tx.order.update({
+            where: { id: payment.orderId },
+            data: { status: OrderStatus.CANCELED }
+          });
+        }
+      });
+
+      this.logger.log(
+        `VNPay IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} ` +
+          `for txnRef=${txnRef}, transactionNo=${transactionNo}`
+      );
+
+      return { RspCode: '00', Message: 'Confirm Success' };
+    } catch (error) {
+      this.logger.error(`VNPay IPN: Error processing txnRef=${txnRef}`, error);
+      return { RspCode: '99', Message: 'Unknown error' };
+    }
+  }
+
+  /**
+   * Handle VNPay ReturnURL callback.
+   * Verifies the signature and returns payment result info for the frontend.
+   */
+  handleVnpayReturn(query: Record<string, string>) {
+    const { isValid, vnpParams } = this.vnpayService.verifySecureHash(query);
+
+    if (!isValid) {
+      return {
+        success: false,
+        message: 'Chữ ký không hợp lệ'
+      };
+    }
+
+    const responseCode = vnpParams['vnp_ResponseCode'];
+    const isSuccess = responseCode === '00';
+
+    return {
+      success: isSuccess,
+      message: isSuccess
+        ? 'Giao dịch thành công'
+        : `Giao dịch không thành công. Mã lỗi: ${responseCode}`,
+      data: {
+        txnRef: vnpParams['vnp_TxnRef'],
+        amount: Number(vnpParams['vnp_Amount']) / 100,
+        orderInfo: vnpParams['vnp_OrderInfo'],
+        transactionNo: vnpParams['vnp_TransactionNo'],
+        bankCode: vnpParams['vnp_BankCode'],
+        payDate: vnpParams['vnp_PayDate'],
+        responseCode
+      }
+    };
+  }
+
   async previewOrder(userId: string, dto: PreviewOrderDto) {
     const { checkoutItems, totalProductAmount, shippingFee, totalAmount } =
-      await this.buildCheckoutContext(userId, dto.addressId, dto.items);
+      await this.buildCheckoutContext(userId, dto.addressId, dto.items, {
+        paymentMethod: dto.paymentMethod
+      });
 
     return {
       totalProductAmount: totalProductAmount.toFixed(2),
@@ -248,7 +411,10 @@ export class OrderService {
   private async buildCheckoutContext(
     userId: string,
     addressId: string,
-    requestedItems?: CheckoutOrderItemDto[]
+    requestedItems?: CheckoutOrderItemDto[],
+    options?: {
+      paymentMethod?: PaymentMethod;
+    }
   ) {
     const user = await this.prisma.user.findUnique({
       where: {
@@ -370,7 +536,8 @@ export class OrderService {
         districtId: address.districtId,
         wardCode: address.wardCode
       },
-      totalProductAmount
+      totalProductAmount,
+      options?.paymentMethod
     );
 
     return {
@@ -387,19 +554,28 @@ export class OrderService {
   private async calculateShippingFee(
     address: {
       districtId: number | null;
-      wardCode: number | null;
+      wardCode: string | null;
     },
-    totalProductAmount: Prisma.Decimal
+    totalProductAmount: Prisma.Decimal,
+    paymentMethod?: PaymentMethod
   ): Promise<Prisma.Decimal> {
     if (!address.districtId || !address.wardCode) {
       return new Prisma.Decimal(0);
     }
 
     try {
+      const codValue =
+        paymentMethod === PaymentMethod.COD
+          ? Number(totalProductAmount.toFixed(0))
+          : 0;
+
       const shippingData = await this.shippingService.getShippingFee({
         insuranceValue: Number(totalProductAmount.toFixed(0)),
         toDistrictId: String(address.districtId),
-        toWardCode: String(address.wardCode)
+        toWardCode: String(address.wardCode),
+        codValue,
+        serviceTypeId: 2,
+        serviceId: 0
       });
 
       const rawFee =
@@ -410,14 +586,12 @@ export class OrderService {
 
       const normalizedFee = Number(rawFee);
       if (!Number.isFinite(normalizedFee) || normalizedFee < 0) {
-        return new Prisma.Decimal(0);
+        return new Prisma.Decimal(30000);
       }
 
       return new Prisma.Decimal(normalizedFee);
     } catch {
-      throw new ConflictException(
-        'Không thể tính phí vận chuyển. Vui lòng thử lại.'
-      );
+      return new Prisma.Decimal(30000);
     }
   }
 
@@ -538,10 +712,6 @@ export class OrderService {
 
     if (orderStatus === OrderStatus.PAID) {
       return PaymentStatus.SUCCESS;
-    }
-
-    if (orderStatus === OrderStatus.CANCELED) {
-      return PaymentStatus.FAILED;
     }
 
     return currentPaymentStatus ?? PaymentStatus.PENDING;
