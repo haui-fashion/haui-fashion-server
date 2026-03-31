@@ -96,6 +96,25 @@ function ensureArray(
   return values;
 }
 
+function buildColumnCondition(
+  column: string,
+  leafCondition: unknown
+): Record<string, unknown> {
+  const parts = column
+    .split('.')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  if (parts.length === 0) {
+    throw new BadRequestException('Cột lọc không hợp lệ');
+  }
+
+  return parts.reduceRight<Record<string, unknown>>(
+    (acc, key) => ({ [key]: acc }),
+    leafCondition as Record<string, unknown>
+  );
+}
+
 export function buildPrismaWhereFromFilters(
   filters?: FilterDto[]
 ): Record<string, unknown> {
@@ -117,46 +136,46 @@ export function buildPrismaWhereFromFilters(
 
     switch (operator) {
       case FilterOperator.EQ: {
-        andConditions.push({
-          [column]: parseByType(filter.value, type)
-        });
+        andConditions.push(
+          buildColumnCondition(column, parseByType(filter.value, type))
+        );
         break;
       }
       case FilterOperator.CONTAINS: {
         const value = parseStringValue(filter.value);
-        andConditions.push({
-          [column]: {
+        andConditions.push(
+          buildColumnCondition(column, {
             contains: value,
             mode: 'insensitive'
-          }
-        });
+          })
+        );
         break;
       }
       case FilterOperator.GT: {
-        andConditions.push({
-          [column]: {
+        andConditions.push(
+          buildColumnCondition(column, {
             gt: parseByType(filter.value, type)
-          }
-        });
+          })
+        );
         break;
       }
       case FilterOperator.LT: {
-        andConditions.push({
-          [column]: {
+        andConditions.push(
+          buildColumnCondition(column, {
             lt: parseByType(filter.value, type)
-          }
-        });
+          })
+        );
         break;
       }
       case FilterOperator.IN: {
         const parsedValues = ensureArray(values, operator).map((value) =>
           parseByType(value, type)
         );
-        andConditions.push({
-          [column]: {
+        andConditions.push(
+          buildColumnCondition(column, {
             in: parsedValues
-          }
-        });
+          })
+        );
         break;
       }
       case FilterOperator.BETWEEN: {
@@ -170,12 +189,12 @@ export function buildPrismaWhereFromFilters(
         const [start, end] = betweenValues.map((value) =>
           parseByType(value, type)
         );
-        andConditions.push({
-          [column]: {
+        andConditions.push(
+          buildColumnCondition(column, {
             gte: start,
             lte: end
-          }
-        });
+          })
+        );
         break;
       }
       default:

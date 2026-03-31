@@ -14,18 +14,22 @@ import { ShippingService } from '@components/shipping/services/shipping.serivce'
 import { EntityCodeService, PrismaService } from '@core/modules/prisma';
 import { VNPayService } from '@core/modules/vnpay';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
   Prisma
 } from '@prisma/client';
+
+const ONLINE_PAYMENT_TTL_HOURS = 12;
 
 type CheckoutCartItem = {
   cartItemId: string;
@@ -72,6 +76,12 @@ export class OrderService {
   ) {}
 
   async createFromMyCart(userId: string, dto: CreateOrderDto, ipAddr?: string) {
+    if (dto.paymentMethod === PaymentMethod.MOMO) {
+      throw new BadRequestException(
+        'Phương thức MOMO hiện chưa được hỗ trợ. Vui lòng chọn COD hoặc VNPAY.'
+      );
+    }
+
     const checkoutContext = await this.buildCheckoutContext(
       userId,
       dto.addressId,
@@ -94,11 +104,11 @@ export class OrderService {
     const paymentMethod = dto.paymentMethod ?? PaymentMethod.COD;
     const initialOrderStatus =
       paymentMethod === PaymentMethod.COD
-        ? OrderStatus.PAID
+        ? OrderStatus.TO_DELIVERY
         : OrderStatus.PENDING;
     const initialPaymentStatus =
       paymentMethod === PaymentMethod.COD
-        ? PaymentStatus.SUCCESS
+        ? PaymentStatus.PENDING
         : PaymentStatus.PENDING;
 
     for (let attempt = 0; attempt < MAX_CODE_GENERATION_RETRIES; attempt++) {
@@ -275,6 +285,20 @@ export class OrderService {
         return { RspCode: '01', Message: 'Order not found' };
       }
 
+      const paymentDeadline = this.getOnlinePaymentDeadline(payment.createdAt);
+      if (new Date() > paymentDeadline) {
+        await this.prisma.$transaction(async (tx) => {
+          await this.failOrderAndRestoreStock(tx, payment.orderId, {
+            providerTransactionId: transactionNo || undefined
+          });
+        });
+
+        this.logger.warn(
+          `VNPay IPN: Payment expired for txnRef=${txnRef}, deadline=${paymentDeadline.toISOString()}`
+        );
+        return { RspCode: '02', Message: 'Order expired' };
+      }
+
       // Verify amount
       const paymentAmount = Number(payment.amount);
       if (Math.round(paymentAmount) !== Math.round(vnpAmount)) {
@@ -297,35 +321,22 @@ export class OrderService {
       const isSuccess = responseCode === '00' && transactionStatus === '00';
 
       await this.prisma.$transaction(async (tx) => {
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: isSuccess ? PaymentStatus.SUCCESS : PaymentStatus.FAILED,
-            providerTransactionId: transactionNo || undefined
-          }
-        });
-
         if (isSuccess) {
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: PaymentStatus.SUCCESS,
+              providerTransactionId: transactionNo || undefined
+            }
+          });
+
           await tx.order.update({
             where: { id: payment.orderId },
             data: { status: OrderStatus.PAID }
           });
         } else {
-          // Restore stock on failed payment
-          const orderItems = await tx.orderItem.findMany({
-            where: { orderId: payment.orderId }
-          });
-
-          for (const item of orderItems) {
-            await tx.variant.update({
-              where: { id: item.variantId },
-              data: { stock: { increment: item.quantity } }
-            });
-          }
-
-          await tx.order.update({
-            where: { id: payment.orderId },
-            data: { status: OrderStatus.CANCELED }
+          await this.failOrderAndRestoreStock(tx, payment.orderId, {
+            providerTransactionId: transactionNo || undefined
           });
         }
       });
@@ -595,11 +606,14 @@ export class OrderService {
     }
   }
 
-  async findMyOrders(userId: string) {
-    return this.orderRepository.findByUserId(userId);
+  async findMyOrders(userId: string, query: QueryOrderDto) {
+    await this.expirePendingOnlineOrdersByUser(userId);
+    return this.orderRepository.findAllByUser(userId, query);
   }
 
   async findMyOrderById(id: string, userId: string) {
+    await this.expirePendingOnlineOrderById(id, userId);
+
     const order = await this.orderRepository.findOneByIdAndUserId(id, userId);
 
     if (!order) {
@@ -610,10 +624,13 @@ export class OrderService {
   }
 
   async findAllForAdmin(query: QueryOrderDto) {
+    await this.expirePendingOnlineOrders();
     return this.orderRepository.findAllForAdmin(query);
   }
 
   async findByIdForAdmin(id: string) {
+    await this.expirePendingOnlineOrderById(id);
+
     const order = await this.orderRepository.findOneById(id);
     if (!order) {
       throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
@@ -623,6 +640,8 @@ export class OrderService {
   }
 
   async updateStatusForAdmin(id: string, dto: UpdateOrderStatusDto) {
+    await this.expirePendingOnlineOrderById(id);
+
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
@@ -701,6 +720,77 @@ export class OrderService {
     return updated;
   }
 
+  async retryMyVnpayPayment(orderId: string, userId: string, ipAddr?: string) {
+    await this.expirePendingOnlineOrderById(orderId, userId);
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: orderId,
+        userId
+      },
+      include: {
+        payment: true
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Không tìm thấy đơn hàng với id ${orderId}`);
+    }
+
+    if (!order.payment) {
+      throw new ConflictException('Đơn hàng chưa có thông tin thanh toán');
+    }
+
+    if (order.payment.method !== PaymentMethod.VNPAY) {
+      throw new BadRequestException(
+        'Chỉ hỗ trợ tạo lại link thanh toán cho VNPAY'
+      );
+    }
+
+    if (
+      order.payment.status !== PaymentStatus.PENDING ||
+      order.status !== OrderStatus.PENDING
+    ) {
+      throw new ConflictException(
+        'Đơn hàng không còn ở trạng thái chờ thanh toán'
+      );
+    }
+
+    const paymentDeadline = this.getOnlinePaymentDeadline(
+      order.payment.createdAt
+    );
+    if (new Date() > paymentDeadline) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.failOrderAndRestoreStock(tx, order.id);
+      });
+
+      throw new ConflictException(
+        'Đơn hàng đã quá thời gian thanh toán 12 giờ và đã được hủy.'
+      );
+    }
+
+    const paymentUrl = this.vnpayService.createPaymentUrl({
+      ipAddr: ipAddr || '127.0.0.1',
+      txnRef: order.payment.code,
+      amount: Number(order.payment.amount),
+      orderInfo: `Thanh toan don hang ${order.code}`
+    });
+
+    return {
+      orderId: order.id,
+      paymentCode: order.payment.code,
+      paymentUrl,
+      expiresAt: paymentDeadline.toISOString()
+    };
+  }
+
+  @Cron('*/10 * * * *', {
+    name: 'expire-pending-online-orders'
+  })
+  async expirePendingOnlineOrdersCron() {
+    await this.expirePendingOnlineOrders();
+  }
+
   private resolvePaymentStatus(
     orderStatus: OrderStatus,
     requestedPaymentStatus: PaymentStatus | undefined,
@@ -715,6 +805,151 @@ export class OrderService {
     }
 
     return currentPaymentStatus ?? PaymentStatus.PENDING;
+  }
+
+  private async expirePendingOnlineOrdersByUser(userId: string) {
+    const candidates = await this.prisma.order.findMany({
+      where: {
+        userId,
+        status: OrderStatus.PENDING,
+        payment: {
+          is: {
+            status: PaymentStatus.PENDING,
+            method: {
+              in: [PaymentMethod.VNPAY, PaymentMethod.MOMO]
+            }
+          }
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    for (const candidate of candidates) {
+      await this.expirePendingOnlineOrderById(candidate.id, userId);
+    }
+  }
+
+  private async expirePendingOnlineOrders() {
+    const deadline = new Date(
+      Date.now() - ONLINE_PAYMENT_TTL_HOURS * 60 * 60 * 1000
+    );
+
+    const expiredOrders = await this.prisma.order.findMany({
+      where: {
+        status: OrderStatus.PENDING,
+        payment: {
+          is: {
+            status: PaymentStatus.PENDING,
+            method: {
+              in: [PaymentMethod.VNPAY, PaymentMethod.MOMO]
+            },
+            createdAt: {
+              lte: deadline
+            }
+          }
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    for (const order of expiredOrders) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.failOrderAndRestoreStock(tx, order.id);
+      });
+    }
+  }
+
+  private async expirePendingOnlineOrderById(orderId: string, userId?: string) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: orderId,
+        ...(userId ? { userId } : {})
+      },
+      include: {
+        payment: true
+      }
+    });
+
+    if (!order || !order.payment) {
+      return;
+    }
+
+    if (
+      order.status !== OrderStatus.PENDING ||
+      order.payment.status !== PaymentStatus.PENDING ||
+      (order.payment.method !== PaymentMethod.VNPAY &&
+        order.payment.method !== PaymentMethod.MOMO)
+    ) {
+      return;
+    }
+
+    const paymentDeadline = this.getOnlinePaymentDeadline(
+      order.payment.createdAt
+    );
+    if (new Date() <= paymentDeadline) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.failOrderAndRestoreStock(tx, order.id);
+    });
+  }
+
+  private getOnlinePaymentDeadline(createdAt: Date): Date {
+    return new Date(
+      createdAt.getTime() + ONLINE_PAYMENT_TTL_HOURS * 60 * 60 * 1000
+    );
+  }
+
+  private async failOrderAndRestoreStock(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    options?: {
+      providerTransactionId?: string;
+    }
+  ) {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        payment: true
+      }
+    });
+
+    if (!order || !order.payment) {
+      return;
+    }
+
+    if (
+      order.status !== OrderStatus.PENDING ||
+      order.payment.status !== PaymentStatus.PENDING
+    ) {
+      return;
+    }
+
+    await tx.payment.update({
+      where: { id: order.payment.id },
+      data: {
+        status: PaymentStatus.FAILED,
+        providerTransactionId: options?.providerTransactionId
+      }
+    });
+
+    for (const item of order.items) {
+      await tx.variant.update({
+        where: { id: item.variantId },
+        data: { stock: { increment: item.quantity } }
+      });
+    }
+
+    await tx.order.update({
+      where: { id: orderId },
+      data: { status: OrderStatus.CANCELED }
+    });
   }
 
   private isCodeConflictError(error: unknown): boolean {

@@ -137,6 +137,75 @@ export class OrderRepository extends BaseRepository<OrderEntity, Order> {
     ) as Promise<OrderWithDetails[]>;
   }
 
+  async findAllByUser(
+    userId: string,
+    query: QueryOrderDto
+  ): Promise<PaginatedData<OrderWithDetails>> {
+    const { pagination, sort, filter, search, status } = query;
+    const page = pagination?.page ?? 1;
+    const limit = pagination?.limit ?? 10;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.OrderWhereInput = {
+      userId
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [{ code: { contains: search, mode: 'insensitive' } }];
+    }
+
+    if (filter && filter.length > 0) {
+      const filterWhere = buildPrismaWhereFromFilters(filter);
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+      const nextAnd = Array.isArray(filterWhere.AND) ? filterWhere.AND : [];
+      where.AND = [...existingAnd, ...nextAnd] as Prisma.OrderWhereInput[];
+    }
+
+    const orderBy: Prisma.OrderOrderByWithRelationInput[] = [];
+    if (sort && sort.length > 0) {
+      sort.forEach((s) => {
+        const orderItem: Record<string, 'asc' | 'desc'> = {};
+        orderItem[s.column] = s.value;
+        orderBy.push(orderItem as Prisma.OrderOrderByWithRelationInput);
+      });
+    } else {
+      orderBy.push({ createdAt: 'desc' });
+    }
+
+    const finalOrderBy =
+      orderBy.length === 1
+        ? orderBy[0]
+        : (orderBy as unknown as Prisma.OrderOrderByWithRelationInput);
+
+    const dataPromise = this.datasource.findAllByCondition(where, {
+      include: orderInclude,
+      skip,
+      take: limit,
+      orderBy: finalOrderBy
+    });
+    const countPromise = this.datasource.count(where);
+
+    const [items, total] = await Promise.all([dataPromise, countPromise]);
+
+    return {
+      items: items as OrderWithDetails[],
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
   async findOneByIdAndUserId(
     id: string,
     userId: string

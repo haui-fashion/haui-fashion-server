@@ -305,25 +305,17 @@ export class ChatbotConversationService {
         .join('\n')}\nCurrent message: ${normalizedMessage}`
     );
 
-    const assistantResult =
-      intent.intent === 'OUT_OF_SCOPE'
-        ? {
-            answer:
-              'Mình chỉ hỗ trợ các nội dung liên quan website thời trang như tìm sản phẩm, tư vấn size/màu, đơn hàng và chính sách mua sắm.',
-            toolCalls: [],
-            recommendedProductIds: [] as string[]
-          }
-        : await this.chatbotToolCallLoopService.run({
-            intent: intent.intent,
-            message: normalizedMessage,
-            history,
-            systemInstruction: this.buildSystemInstruction(intent.intent),
-            context: {
-              userId: input.userId,
-              sessionId: conversation.sessionKey,
-              traceId: input.traceId
-            }
-          });
+    const assistantResult = await this.chatbotToolCallLoopService.run({
+      intent: intent.intent,
+      message: normalizedMessage,
+      history,
+      systemInstruction: this.buildSystemInstruction(intent.intent),
+      context: {
+        userId: input.userId,
+        sessionId: conversation.sessionKey,
+        traceId: input.traceId
+      }
+    });
 
     const productCards = this.extractProductCards(
       assistantResult.toolCalls,

@@ -17,9 +17,18 @@ export const MAX_CODE_GENERATION_RETRIES = 5;
 
 export const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PENDING]: [OrderStatus.PAID, OrderStatus.CANCELED],
-  [OrderStatus.PAID]: [OrderStatus.COMPLETED, OrderStatus.CANCELED],
-  [OrderStatus.TO_DELIVERY]: [],
-  [OrderStatus.DELIVERING]: [],
+  [OrderStatus.PAID]: [
+    OrderStatus.TO_DELIVERY,
+    OrderStatus.DELIVERING,
+    OrderStatus.COMPLETED,
+    OrderStatus.CANCELED
+  ],
+  [OrderStatus.TO_DELIVERY]: [
+    OrderStatus.DELIVERING,
+    OrderStatus.COMPLETED,
+    OrderStatus.CANCELED
+  ],
+  [OrderStatus.DELIVERING]: [OrderStatus.COMPLETED, OrderStatus.CANCELED],
   [OrderStatus.COMPLETED]: [],
   [OrderStatus.CANCELED]: []
 };

@@ -39,7 +39,8 @@ export class VNPayService {
     const date = new Date();
     const createDate = this.formatDate(date);
 
-    const expireDate = new Date(date.getTime() + 15 * 60 * 1000);
+    const expireDate =
+      params.expiresAt ?? new Date(date.getTime() + 15 * 60 * 1000);
     const expireDateStr = this.formatDate(expireDate);
 
     const vnpParams: Record<string, string | number> = {
@@ -63,15 +64,14 @@ export class VNPayService {
     }
 
     const sortedParams = this.sortObject(vnpParams);
-
-    const signData = qs.stringify(sortedParams, { encode: false });
+    const signData = this.buildSignData(sortedParams);
     const hmac = crypto.createHmac('sha512', this.hashSecret);
     const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
     sortedParams['vnp_SecureHash'] = signed;
 
     const paymentUrl =
-      this.paymentUrl + '?' + qs.stringify(sortedParams, { encode: false });
+      this.paymentUrl + '?' + qs.stringify(sortedParams, { encode: true });
 
     this.logger.log(
       `Created VNPay payment URL for txnRef=${params.txnRef}, amount=${params.amount}`
@@ -88,7 +88,7 @@ export class VNPayService {
     delete vnpParams['vnp_SecureHashType'];
 
     const sortedParams = this.sortObject(vnpParams);
-    const signData = qs.stringify(sortedParams, { encode: false });
+    const signData = this.buildSignData(sortedParams);
     const hmac = crypto.createHmac('sha512', this.hashSecret);
     const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
@@ -116,20 +116,33 @@ export class VNPayService {
     return sorted;
   }
 
+  private buildSignData(params: Record<string, string | number>): string {
+    return Object.keys(params)
+      .sort()
+      .map((key) => {
+        const encodedKey = encodeURIComponent(key);
+        const encodedValue = encodeURIComponent(String(params[key])).replace(
+          /%20/g,
+          '+'
+        );
+        return `${encodedKey}=${encodedValue}`;
+      })
+      .join('&');
+  }
+
   private formatDate(date: Date): string {
     const pad = (n: number) => n.toString().padStart(2, '0');
 
-    const vnDate = new Date(
-      date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' })
-    );
+    const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+    const vnTime = new Date(utc + 7 * 60 * 60 * 1000);
 
     return (
-      vnDate.getFullYear().toString() +
-      pad(vnDate.getMonth() + 1) +
-      pad(vnDate.getDate()) +
-      pad(vnDate.getHours()) +
-      pad(vnDate.getMinutes()) +
-      pad(vnDate.getSeconds())
+      vnTime.getFullYear().toString() +
+      pad(vnTime.getMonth() + 1) +
+      pad(vnTime.getDate()) +
+      pad(vnTime.getHours()) +
+      pad(vnTime.getMinutes()) +
+      pad(vnTime.getSeconds())
     );
   }
 }

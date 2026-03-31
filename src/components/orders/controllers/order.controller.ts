@@ -56,17 +56,11 @@ export class OrderController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user orders' })
-  async findMyOrders(@CurrentUser() user: CurrentUserDto) {
-    return this.orderService.findMyOrders(user.userId);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get one current user order by id' })
-  async findMyOrderById(
+  async findMyOrders(
     @CurrentUser() user: CurrentUserDto,
-    @Param('id') id: string
+    @Query() query: QueryOrderDto
   ) {
-    return this.orderService.findMyOrderById(id, user.userId);
+    return this.orderService.findMyOrders(user.userId, query);
   }
 
   @Public()
@@ -109,5 +103,29 @@ export class OrderController {
     @Body() dto: UpdateOrderStatusDto
   ) {
     return this.orderService.updateStatusForAdmin(id, dto);
+  }
+
+  @Post(':id/retry-vnpay')
+  @ApiOperation({ summary: 'Retry VNPay payment for my pending order' })
+  async retryVnpayPayment(
+    @CurrentUser() user: CurrentUserDto,
+    @Param('id') id: string,
+    @Req() req: Request
+  ) {
+    const ipAddr =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.ip ||
+      '127.0.0.1';
+
+    return await this.orderService.retryMyVnpayPayment(id, user.userId, ipAddr);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get one current user order by id' })
+  async findMyOrderById(
+    @CurrentUser() user: CurrentUserDto,
+    @Param('id') id: string
+  ) {
+    return this.orderService.findMyOrderById(id, user.userId);
   }
 }

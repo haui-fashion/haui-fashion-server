@@ -5,6 +5,7 @@ export interface CreatePaymentUrlParams {
   orderInfo: string;
   bankCode?: string;
   locale?: string;
+  expiresAt?: Date;
 }
 
 export interface VNPayReturnParams {
