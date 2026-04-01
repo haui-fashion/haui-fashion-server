@@ -116,6 +116,7 @@ export class CategoryService {
   async softDelete(id: string): Promise<Category> {
     await this.findById(id, Role.ADMIN);
     return this.categoryRepository.updateCategory(id, {
+      isActive: false,
       deletedAt: new Date()
     });
   }

@@ -79,7 +79,7 @@ export class ResponseBuilder<T = unknown> {
     };
   }
 
-  static created<T>(data: T, message = 'Tạo mới thành công'): ApiResponse<T> {
+  static created<T>(data: T, message = 'Thành công'): ApiResponse<T> {
     return {
       statusCode: StatusCodes.CREATED,
       message,
@@ -243,7 +243,7 @@ export class TransformResponseInterceptor<T>
   private getDefaultMessage(statusCode: number): string {
     const messages: Record<number, string> = {
       [StatusCodes.OK]: 'Thành công',
-      [StatusCodes.CREATED]: 'Tạo mới thành công',
+      [StatusCodes.CREATED]: 'Thành công',
       [StatusCodes.ACCEPTED]: 'Chấp nhận',
       [StatusCodes.NO_CONTENT]: 'Không có dữ liệu'
     };

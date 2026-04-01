@@ -10,9 +10,9 @@ import { PreviewOrderDto } from '@components/orders/dtos/preview-order.dto';
 import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderRepository } from '@components/orders/repositories/order.repository';
-import { ShippingService } from '@components/shipping/services/shipping.serivce';
-import { EntityCodeService, PrismaService } from '@core/modules/prisma';
+import { ShippingService } from '@components/shipping/services/shipping.service';
 import { MoMoIpnBody, MoMoService } from '@core/modules/momo';
+import { EntityCodeService, PrismaService } from '@core/modules/prisma';
 import { VNPayService } from '@core/modules/vnpay';
 import {
   BadRequestException,
@@ -30,7 +30,7 @@ import {
   Prisma
 } from '@prisma/client';
 
-const ONLINE_PAYMENT_TTL_HOURS = 12;
+const ONLINE_PAYMENT_TTL_HOURS = 1;
 
 type CheckoutCartItem = {
   cartItemId: string;
@@ -43,6 +43,7 @@ type CheckoutCartItem = {
     stock: number;
     productId: string;
     product: {
+      isActive: boolean;
       name: string;
       images?: {
         file: {
@@ -115,10 +116,19 @@ export class OrderService {
 
       try {
         const created = await this.prisma.$transaction(async (tx) => {
-          for (const item of checkoutItems) {
+          const stockLockItems = [...checkoutItems].sort((a, b) =>
+            a.variantId.localeCompare(b.variantId)
+          );
+
+          for (const item of stockLockItems) {
             const updatedStock = await tx.variant.updateMany({
               where: {
                 id: item.variantId,
+                product: {
+                  is: {
+                    isActive: true
+                  }
+                },
                 stock: {
                   gte: item.quantity
                 }
@@ -132,7 +142,7 @@ export class OrderService {
 
             if (updatedStock.count === 0) {
               throw new ConflictException(
-                `Biến thể ${item.variant.sku} đã hết hàng hoặc không đủ tồn kho`
+                `Biến thể ${item.variant.sku} đã ngừng bán, hết hàng hoặc không đủ tồn kho`
               );
             }
           }
@@ -193,27 +203,20 @@ export class OrderService {
               }
             },
             include: {
-              items: {
-                include: {
-                  variant: {
-                    include: {
-                      product: true
-                    }
-                  }
-                }
-              },
+              items: true,
               payment: true
             }
           });
 
           if (dto.items && dto.items.length > 0) {
-            for (const item of checkoutItems) {
-              await tx.cartItem.delete({
-                where: {
-                  id: item.cartItemId
-                }
-              });
-            }
+            await tx.cartItem.deleteMany({
+              where: {
+                id: {
+                  in: checkoutItems.map((item) => item.cartItemId)
+                },
+                cartId: cart.id
+              }
+            });
           } else {
             await tx.cartItem.deleteMany({
               where: {
@@ -292,6 +295,17 @@ export class OrderService {
         return { RspCode: '01', Message: 'Order not found' };
       }
 
+      if (
+        payment.status !== PaymentStatus.PENDING ||
+        payment.order.status !== OrderStatus.PENDING
+      ) {
+        this.logger.log(
+          `VNPay IPN: Order already processed for txnRef=${txnRef}, ` +
+            `orderStatus=${payment.order.status}, paymentStatus=${payment.status}`
+        );
+        return { RspCode: '02', Message: 'Order already processed' };
+      }
+
       const paymentDeadline = this.getOnlinePaymentDeadline(payment.createdAt);
       if (new Date() > paymentDeadline) {
         await this.prisma.$transaction(async (tx) => {
@@ -316,37 +330,32 @@ export class OrderService {
         return { RspCode: '04', Message: 'Invalid amount' };
       }
 
-      // Check if already processed (idempotency)
-      if (payment.status !== PaymentStatus.PENDING) {
-        this.logger.log(
-          `VNPay IPN: Payment already confirmed for txnRef=${txnRef}`
-        );
-        return { RspCode: '02', Message: 'Order already confirmed' };
-      }
-
       // Update payment and order status based on VNPay response
       const isSuccess = responseCode === '00' && transactionStatus === '00';
 
-      await this.prisma.$transaction(async (tx) => {
+      const handled = await this.prisma.$transaction(async (tx) => {
         if (isSuccess) {
-          await tx.payment.update({
-            where: { id: payment.id },
-            data: {
-              status: PaymentStatus.SUCCESS,
+          return this.markOrderPaidFromPending(
+            tx,
+            payment.id,
+            payment.orderId,
+            {
               providerTransactionId: transactionNo || undefined
             }
-          });
-
-          await tx.order.update({
-            where: { id: payment.orderId },
-            data: { status: OrderStatus.PAID }
-          });
-        } else {
-          await this.failOrderAndRestoreStock(tx, payment.orderId, {
-            providerTransactionId: transactionNo || undefined
-          });
+          );
         }
+
+        return this.failOrderAndRestoreStock(tx, payment.orderId, {
+          providerTransactionId: transactionNo || undefined
+        });
       });
+
+      if (!handled) {
+        this.logger.log(
+          `VNPay IPN: Skip because order is not pending anymore for txnRef=${txnRef}`
+        );
+        return { RspCode: '02', Message: 'Order already processed' };
+      }
 
       this.logger.log(
         `VNPay IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} ` +
@@ -425,6 +434,17 @@ export class OrderService {
         return;
       }
 
+      if (
+        payment.status !== PaymentStatus.PENDING ||
+        payment.order.status !== OrderStatus.PENDING
+      ) {
+        this.logger.log(
+          `MoMo IPN: Order already processed for orderId=${txnRef}, ` +
+            `orderStatus=${payment.order.status}, paymentStatus=${payment.status}`
+        );
+        return;
+      }
+
       const paymentDeadline = this.getOnlinePaymentDeadline(payment.createdAt);
       if (new Date() > paymentDeadline) {
         await this.prisma.$transaction(async (tx) => {
@@ -449,37 +469,32 @@ export class OrderService {
         return;
       }
 
-      // Check if already processed (idempotency)
-      if (payment.status !== PaymentStatus.PENDING) {
-        this.logger.log(
-          `MoMo IPN: Payment already confirmed for orderId=${txnRef}`
-        );
-        return;
-      }
-
       // resultCode === 0 means success in MoMo
       const isSuccess = resultCode === 0;
 
-      await this.prisma.$transaction(async (tx) => {
+      const handled = await this.prisma.$transaction(async (tx) => {
         if (isSuccess) {
-          await tx.payment.update({
-            where: { id: payment.id },
-            data: {
-              status: PaymentStatus.SUCCESS,
+          return this.markOrderPaidFromPending(
+            tx,
+            payment.id,
+            payment.orderId,
+            {
               providerTransactionId: transId
             }
-          });
-
-          await tx.order.update({
-            where: { id: payment.orderId },
-            data: { status: OrderStatus.PAID }
-          });
-        } else {
-          await this.failOrderAndRestoreStock(tx, payment.orderId, {
-            providerTransactionId: transId
-          });
+          );
         }
+
+        return this.failOrderAndRestoreStock(tx, payment.orderId, {
+          providerTransactionId: transId
+        });
       });
+
+      if (!handled) {
+        this.logger.log(
+          `MoMo IPN: Skip because order is not pending anymore for orderId=${txnRef}`
+        );
+        return;
+      }
 
       this.logger.log(
         `MoMo IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} ` +
@@ -664,6 +679,12 @@ export class OrderService {
     }
 
     for (const item of checkoutItems) {
+      if (!item.variant.product.isActive) {
+        throw new ConflictException(
+          `Biến thể ${item.variant.sku} thuộc sản phẩm đã ngừng bán hoặc bị vô hiệu hóa`
+        );
+      }
+
       if (item.variant.stock < item.quantity) {
         throw new ConflictException(
           `Biến thể ${item.variant.sku} không đủ tồn kho để đặt hàng`
@@ -812,7 +833,11 @@ export class OrderService {
         currentStatus !== OrderStatus.CANCELED &&
         nextStatus === OrderStatus.CANCELED
       ) {
-        for (const item of order.items) {
+        const rollbackItems = [...order.items].sort((a, b) =>
+          a.variantId.localeCompare(b.variantId)
+        );
+
+        for (const item of rollbackItems) {
           await tx.variant.update({
             where: {
               id: item.variantId
@@ -1103,6 +1128,53 @@ export class OrderService {
     );
   }
 
+  private async markOrderPaidFromPending(
+    tx: Prisma.TransactionClient,
+    paymentId: string,
+    orderId: string,
+    options?: {
+      providerTransactionId?: string;
+    }
+  ) {
+    const updatedPayment = await tx.payment.updateMany({
+      where: {
+        id: paymentId,
+        status: PaymentStatus.PENDING,
+        order: {
+          is: {
+            status: OrderStatus.PENDING
+          }
+        }
+      },
+      data: {
+        status: PaymentStatus.SUCCESS,
+        providerTransactionId: options?.providerTransactionId
+      }
+    });
+
+    if (updatedPayment.count === 0) {
+      return false;
+    }
+
+    const updatedOrder = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        status: OrderStatus.PENDING
+      },
+      data: {
+        status: OrderStatus.PAID
+      }
+    });
+
+    if (updatedOrder.count === 0) {
+      throw new ConflictException(
+        `Không thể cập nhật trạng thái đơn hàng ${orderId} sang đã thanh toán`
+      );
+    }
+
+    return true;
+  }
+
   private async failOrderAndRestoreStock(
     tx: Prisma.TransactionClient,
     orderId: string,
@@ -1119,35 +1191,57 @@ export class OrderService {
     });
 
     if (!order || !order.payment) {
-      return;
+      return false;
     }
 
-    if (
-      order.status !== OrderStatus.PENDING ||
-      order.payment.status !== PaymentStatus.PENDING
-    ) {
-      return;
-    }
-
-    await tx.payment.update({
-      where: { id: order.payment.id },
+    const updatedPayment = await tx.payment.updateMany({
+      where: {
+        id: order.payment.id,
+        status: PaymentStatus.PENDING,
+        order: {
+          is: {
+            status: OrderStatus.PENDING
+          }
+        }
+      },
       data: {
         status: PaymentStatus.FAILED,
         providerTransactionId: options?.providerTransactionId
       }
     });
 
-    for (const item of order.items) {
+    if (updatedPayment.count === 0) {
+      return false;
+    }
+
+    const rollbackItems = [...order.items].sort((a, b) =>
+      a.variantId.localeCompare(b.variantId)
+    );
+
+    for (const item of rollbackItems) {
       await tx.variant.update({
         where: { id: item.variantId },
         data: { stock: { increment: item.quantity } }
       });
     }
 
-    await tx.order.update({
-      where: { id: orderId },
-      data: { status: OrderStatus.CANCELED }
+    const updatedOrder = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        status: OrderStatus.PENDING
+      },
+      data: {
+        status: OrderStatus.CANCELED
+      }
     });
+
+    if (updatedOrder.count === 0) {
+      throw new ConflictException(
+        `Không thể cập nhật trạng thái đơn hàng ${orderId} sang đã hủy`
+      );
+    }
+
+    return true;
   }
 
   private isCodeConflictError(error: unknown): boolean {

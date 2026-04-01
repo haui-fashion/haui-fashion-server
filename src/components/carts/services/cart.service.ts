@@ -84,19 +84,48 @@ export class CartService {
         nextQuantity
       );
     } else {
-      await this.cartRepository.createItem({
-        cart: {
-          connect: {
-            id: cart.id
-          }
-        },
-        variant: {
-          connect: {
-            id: dto.variantId
-          }
-        },
-        quantity
-      });
+      try {
+        await this.cartRepository.createItem({
+          cart: {
+            connect: {
+              id: cart.id
+            }
+          },
+          variant: {
+            connect: {
+              id: dto.variantId
+            }
+          },
+          quantity
+        });
+      } catch (error) {
+        if (!this.isCartItemUniqueConflictError(error)) {
+          throw error;
+        }
+
+        const latestItem = await this.cartRepository.findItemByCartAndVariant(
+          cart.id,
+          dto.variantId
+        );
+
+        if (!latestItem) {
+          throw new ConflictException(
+            'Không thể thêm sản phẩm vào giỏ hàng, vui lòng thử lại'
+          );
+        }
+
+        const nextQuantity = latestItem.quantity + quantity;
+        if (nextQuantity > variant.stock) {
+          throw new ConflictException(
+            'Số lượng trong giỏ vượt quá tồn kho hiện tại'
+          );
+        }
+
+        await this.cartRepository.updateItemQuantity(
+          latestItem.id,
+          nextQuantity
+        );
+      }
     }
 
     return this.getMyCart(userId);
@@ -224,5 +253,26 @@ export class CartService {
         };
       })
     };
+  }
+
+  private isCartItemUniqueConflictError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2002') {
+      return false;
+    }
+
+    const target = error.meta?.target;
+    if (Array.isArray(target)) {
+      const normalized = target.join('|').toLowerCase();
+      return normalized.includes('cart') && normalized.includes('variant');
+    }
+
+    return typeof target === 'string'
+      ? target.toLowerCase().includes('cart') &&
+          target.toLowerCase().includes('variant')
+      : false;
   }
 }

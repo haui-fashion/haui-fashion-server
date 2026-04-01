@@ -3,7 +3,7 @@ import { USER_CODE_OPTIONS } from '@components/users/constants/user.constant';
 import { UserDatasource } from '@components/users/datasources/user.datasource';
 import { QueryUserDto } from '@components/users/dtos/query-user.dto';
 import { UserEntity } from '@components/users/entities/user.entity';
-import { EntityCodeService } from '@core/modules/prisma';
+import { EntityCodeService, PrismaService } from '@core/modules/prisma';
 import { PaginatedData } from '@core/utilities/interceptors';
 import {
   BaseRepository,
@@ -16,7 +16,8 @@ import { Prisma, User } from '@prisma/client';
 export class UserRepository extends BaseRepository<UserEntity, User> {
   constructor(
     private readonly datasource: UserDatasource,
-    private readonly entityCodeService: EntityCodeService
+    private readonly entityCodeService: EntityCodeService,
+    private readonly prisma: PrismaService
   ) {
     super(UserEntity);
   }
@@ -88,6 +89,28 @@ export class UserRepository extends BaseRepository<UserEntity, User> {
     return this.datasource.findOneByCondition({
       email
     } as Prisma.UserWhereInput);
+  }
+
+  async findByEmailIncludingDeleted(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: {
+        email
+      }
+    });
+  }
+
+  async findByUsername(username: string): Promise<User | null> {
+    return this.datasource.findOneByCondition({
+      username
+    } as Prisma.UserWhereInput);
+  }
+
+  async findByUsernameIncludingDeleted(username: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: {
+        username
+      }
+    });
   }
 
   async findById(id: string): Promise<User | null> {

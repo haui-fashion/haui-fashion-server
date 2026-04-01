@@ -14,12 +14,13 @@ import {
   Injectable,
   UnauthorizedException
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
+  ChangePasswordDto,
   LoginDto,
   RefreshTokenDto,
   RegisterDto,
-  UpdateProfileDto,
-  ChangePasswordDto
+  UpdateProfileDto
 } from '../dtos';
 
 @Injectable()
@@ -32,17 +33,41 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<TokenPair> {
-    const existingUser = await this.userService.findByEmailOrNull(dto.email);
+    const existingUser =
+      await this.userService.findByEmailOrNullIncludingDeleted(dto.email);
     if (existingUser) {
       throw new ConflictException('Email đã tồn tại');
     }
 
-    const user = await this.userService.create({
-      username: dto.email.split('@')[0],
-      fullname: dto.fullname,
-      email: dto.email,
-      password: dto.password
-    });
+    let user: Awaited<ReturnType<UserService['create']>> | null = null;
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const username = await this.generateAvailableUsername(dto.email);
+
+      try {
+        user = await this.userService.create({
+          username,
+          fullname: dto.fullname,
+          email: dto.email,
+          password: dto.password
+        });
+        break;
+      } catch (error) {
+        if (this.isUniqueConstraintErrorOn(error, 'email')) {
+          throw new ConflictException('Email đã tồn tại');
+        }
+
+        if (!this.isUniqueConstraintErrorOn(error, 'username')) {
+          throw error;
+        }
+      }
+    }
+
+    if (!user) {
+      throw new ConflictException(
+        'Không thể tạo tài khoản do trùng tên đăng nhập. Vui lòng thử lại.'
+      );
+    }
 
     await this.cartService.ensureCartByUserId(user.id);
 
@@ -80,7 +105,7 @@ export class AuthService {
 
   async refreshToken(dto: RefreshTokenDto): Promise<TokenPair> {
     try {
-      const payload = this.appJwtService.verifyToken(dto.refreshToken);
+      const payload = this.appJwtService.verifyRefreshToken(dto.refreshToken);
 
       const user = await this.userService.findById(payload.sub);
       if (!user) {
@@ -135,5 +160,51 @@ export class AuthService {
     }
 
     return this.userService.update(userId, { password: dto.newPassword });
+  }
+
+  private async generateAvailableUsername(email: string): Promise<string> {
+    const rawLocalPart = email.split('@')[0] || 'user';
+    const baseUsername = this.normalizeUsername(rawLocalPart);
+
+    for (let suffix = 0; suffix <= 100; suffix++) {
+      const candidate =
+        suffix === 0 ? baseUsername : `${baseUsername}${suffix}`;
+      const existing =
+        await this.userService.findByUsernameOrNullIncludingDeleted(candidate);
+
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    return `${baseUsername}${Date.now().toString().slice(-6)}`;
+  }
+
+  private normalizeUsername(value: string): string {
+    const normalized = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, '')
+      .trim();
+
+    return normalized || 'user';
+  }
+
+  private isUniqueConstraintErrorOn(error: unknown, field: string): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2002') {
+      return false;
+    }
+
+    const target = error.meta?.target;
+    if (Array.isArray(target)) {
+      return target.some((item) => String(item).includes(field));
+    }
+
+    return typeof target === 'string' ? target.includes(field) : false;
   }
 }

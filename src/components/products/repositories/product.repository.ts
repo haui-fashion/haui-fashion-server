@@ -238,16 +238,18 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
     }
 
     if (trimmedSearch) {
-      const vectorResult = await this.findAllByVectorSearch(
-        trimmedSearch,
-        where,
-        page,
-        limit,
-        skip
-      );
+      if (trimmedSearch.length >= 3) {
+        const vectorResult = await this.findAllByVectorSearch(
+          trimmedSearch,
+          where,
+          page,
+          limit,
+          skip
+        );
 
-      if (vectorResult) {
-        return vectorResult;
+        if (vectorResult) {
+          return vectorResult;
+        }
       }
 
       where.OR = this.buildLexicalSearchCondition(trimmedSearch);

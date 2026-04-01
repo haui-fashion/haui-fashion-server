@@ -9,22 +9,7 @@ import {
 import { Injectable } from '@nestjs/common';
 import { Order, Prisma } from '@prisma/client';
 
-type OrderWithDetails = Prisma.OrderGetPayload<{
-  include: {
-    items: {
-      include: {
-        variant: {
-          include: {
-            product: true;
-          };
-        };
-      };
-    };
-    payment: true;
-  };
-}>;
-
-const orderInclude = {
+const orderInclude = Prisma.validator<Prisma.OrderInclude>()({
   user: {
     select: {
       id: true,
@@ -33,17 +18,13 @@ const orderInclude = {
       email: true
     }
   },
-  items: {
-    include: {
-      variant: {
-        include: {
-          product: true
-        }
-      }
-    }
-  },
+  items: true,
   payment: true
-} as const;
+});
+
+type OrderWithDetails = Prisma.OrderGetPayload<{
+  include: typeof orderInclude;
+}>;
 
 @Injectable()
 export class OrderRepository extends BaseRepository<OrderEntity, Order> {

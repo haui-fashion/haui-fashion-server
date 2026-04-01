@@ -24,6 +24,20 @@ export class UserService {
     return this.userRepository.findByEmail(email);
   }
 
+  async findByEmailOrNullIncludingDeleted(email: string): Promise<User | null> {
+    return this.userRepository.findByEmailIncludingDeleted(email);
+  }
+
+  async findByUsernameOrNull(username: string): Promise<User | null> {
+    return this.userRepository.findByUsername(username);
+  }
+
+  async findByUsernameOrNullIncludingDeleted(
+    username: string
+  ): Promise<User | null> {
+    return this.userRepository.findByUsernameIncludingDeleted(username);
+  }
+
   async findByEmail(email: string): Promise<User> {
     const user = await this.userRepository.findByEmail(email);
     if (!user) {
@@ -77,7 +91,8 @@ export class UserService {
   async softDelete(id: string): Promise<User> {
     await this.findById(id);
     const updatedUser = await this.userRepository.updateUser(id, {
-      deletedAt: new Date()
+      deletedAt: new Date(),
+      isActive: false
     });
     await this.appCacheService.del(AppCacheKeys.userInfo(id));
     return updatedUser;

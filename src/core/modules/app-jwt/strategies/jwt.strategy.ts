@@ -31,6 +31,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: JwtPayload): Promise<ValidatedUser> {
     try {
+      if (payload.tokenType === 'refresh') {
+        throw new UnauthorizedException(
+          'Refresh token không thể dùng để truy cập API'
+        );
+      }
+
       const user = await this.userService.findById(payload.sub);
 
       if (!user || !user.isActive) {

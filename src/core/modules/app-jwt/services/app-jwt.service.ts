@@ -2,8 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
+export type JwtTokenType = 'access' | 'refresh';
+
 export interface JwtPayload {
   sub: string;
+  tokenType?: JwtTokenType;
   [key: string]: unknown;
 }
 
@@ -33,14 +36,14 @@ export class AppJwtService {
 
   generateAccessToken(payload: JwtPayload): string {
     return this.jwtService.sign(
-      { ...payload },
+      { ...payload, tokenType: 'access' },
       { expiresIn: this.accessTokenExpiresIn }
     );
   }
 
   generateRefreshToken(payload: JwtPayload): string {
     return this.jwtService.sign(
-      { ...payload },
+      { ...payload, tokenType: 'refresh' },
       { expiresIn: this.refreshTokenExpiresIn }
     );
   }
@@ -54,6 +57,15 @@ export class AppJwtService {
 
   verifyToken(token: string): JwtPayload {
     return this.jwtService.verify<JwtPayload>(token);
+  }
+
+  verifyRefreshToken(token: string): JwtPayload {
+    const payload = this.verifyToken(token);
+    if (payload.tokenType !== 'refresh') {
+      throw new Error('Invalid refresh token type');
+    }
+
+    return payload;
   }
 
   decodeToken(token: string): JwtPayload | null {

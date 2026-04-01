@@ -1,6 +1,6 @@
 import { GetShippingFeeDto } from '@components/shipping/dtos/get-shipping-fee.dto';
 import { GetShippingServiceDto } from '@components/shipping/dtos/get-shipping-service.dto';
-import { ShippingService } from '@components/shipping/services/shipping.serivce';
+import { ShippingService } from '@components/shipping/services/shipping.service';
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
