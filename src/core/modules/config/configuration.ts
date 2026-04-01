@@ -113,6 +113,17 @@ export default () => {
         process.env.VNPAY_PAYMENT_URL ||
         'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
       returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:3000/orders'
+    },
+    momo: {
+      partnerCode: process.env.MOMO_PARTNER_CODE || '',
+      accessKey: process.env.MOMO_ACCESS_KEY || '',
+      secretKey: process.env.MOMO_SECRET_KEY || '',
+      apiUrl: process.env.MOMO_API_URL || 'https://test-payment.momo.vn',
+      redirectUrl:
+        process.env.MOMO_REDIRECT_URL || 'http://localhost:3000/orders',
+      ipnUrl:
+        process.env.MOMO_IPN_URL ||
+        'http://localhost:3000/api/v1/orders/momo-ipn'
     }
   };
 };

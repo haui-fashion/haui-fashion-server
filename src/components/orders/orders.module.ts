@@ -4,10 +4,11 @@ import { OrderRepository } from '@components/orders/repositories/order.repositor
 import { OrderService } from '@components/orders/services/order.service';
 import { ShippingModule } from '@components/shipping/shipping.module';
 import { VNPayModule } from '@core/modules/vnpay';
+import { MoMoModule } from '@core/modules/momo';
 import { Module } from '@nestjs/common';
 
 @Module({
-  imports: [ShippingModule, VNPayModule],
+  imports: [ShippingModule, VNPayModule, MoMoModule],
   controllers: [OrderController],
   providers: [OrderDatasource, OrderRepository, OrderService],
   exports: [OrderService]

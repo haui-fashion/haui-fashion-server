@@ -3,6 +3,7 @@ import { PreviewOrderDto } from '@components/orders/dtos/preview-order.dto';
 import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderService } from '@components/orders/services/order.service';
+import { MoMoIpnBody } from '@core/modules/momo';
 import {
   CurrentUser,
   CurrentUserDto,
@@ -13,6 +14,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -81,6 +83,25 @@ export class OrderController {
     return this.orderService.handleVnpayReturn(query);
   }
 
+  @Public()
+  @Post('momo-ipn')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'MoMo IPN callback (server-to-server, no auth required)'
+  })
+  async momoIpn(@Body() body: MoMoIpnBody) {
+    await this.orderService.handleMomoIpn(body);
+  }
+
+  @Public()
+  @Get('momo-return')
+  @ApiOperation({
+    summary: 'MoMo return URL handler (no auth required)'
+  })
+  momoReturn(@Query() query: Record<string, string>) {
+    return this.orderService.handleMomoReturn(query);
+  }
+
   @Get('admin')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Admin list orders with pagination and filters' })
@@ -118,6 +139,15 @@ export class OrderController {
       '127.0.0.1';
 
     return await this.orderService.retryMyVnpayPayment(id, user.userId, ipAddr);
+  }
+
+  @Post(':id/retry-momo')
+  @ApiOperation({ summary: 'Retry MoMo payment for my pending order' })
+  async retryMomoPayment(
+    @CurrentUser() user: CurrentUserDto,
+    @Param('id') id: string
+  ) {
+    return await this.orderService.retryMyMomoPayment(id, user.userId);
   }
 
   @Get(':id')

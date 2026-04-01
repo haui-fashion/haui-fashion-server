@@ -12,6 +12,7 @@ import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-statu
 import { OrderRepository } from '@components/orders/repositories/order.repository';
 import { ShippingService } from '@components/shipping/services/shipping.serivce';
 import { EntityCodeService, PrismaService } from '@core/modules/prisma';
+import { MoMoIpnBody, MoMoService } from '@core/modules/momo';
 import { VNPayService } from '@core/modules/vnpay';
 import {
   BadRequestException,
@@ -72,16 +73,11 @@ export class OrderService {
     private readonly orderRepository: OrderRepository,
     private readonly entityCodeService: EntityCodeService,
     private readonly shippingService: ShippingService,
-    private readonly vnpayService: VNPayService
+    private readonly vnpayService: VNPayService,
+    private readonly momoService: MoMoService
   ) {}
 
   async createFromMyCart(userId: string, dto: CreateOrderDto, ipAddr?: string) {
-    if (dto.paymentMethod === PaymentMethod.MOMO) {
-      throw new BadRequestException(
-        'Phương thức MOMO hiện chưa được hỗ trợ. Vui lòng chọn COD hoặc VNPAY.'
-      );
-    }
-
     const checkoutContext = await this.buildCheckoutContext(
       userId,
       dto.addressId,
@@ -241,6 +237,17 @@ export class OrderService {
           return { ...created, paymentUrl };
         }
 
+        // Generate MoMo payment URL if payment method is MOMO
+        if (paymentMethod === PaymentMethod.MOMO && created.payment) {
+          const paymentUrl = await this.momoService.createPaymentUrl({
+            txnRef: created.payment.code,
+            amount: Number(totalAmount),
+            orderInfo: `Thanh toan don hang ${orderCode}`
+          });
+
+          return { ...created, paymentUrl };
+        }
+
         return created;
       } catch (error) {
         if (!this.isCodeConflictError(error)) {
@@ -383,6 +390,134 @@ export class OrderService {
         bankCode: vnpParams['vnp_BankCode'],
         payDate: vnpParams['vnp_PayDate'],
         responseCode
+      }
+    };
+  }
+
+  /**
+   * Handle MoMo IPN (Instant Payment Notification) callback.
+   * This is called server-to-server by MoMo via POST with JSON body.
+   * Must respond with HTTP 204 No Content.
+   */
+  async handleMomoIpn(body: MoMoIpnBody): Promise<void> {
+    const { isValid } = this.momoService.verifyIpnSignature(body);
+
+    if (!isValid) {
+      this.logger.warn(
+        `MoMo IPN: Invalid signature for orderId=${body.orderId}`
+      );
+      return;
+    }
+
+    const txnRef = body.orderId;
+    const momoAmount = body.amount;
+    const resultCode = body.resultCode;
+    const transId = String(body.transId);
+
+    try {
+      const payment = await this.prisma.payment.findUnique({
+        where: { code: txnRef },
+        include: { order: true }
+      });
+
+      if (!payment) {
+        this.logger.warn(`MoMo IPN: Payment not found for orderId=${txnRef}`);
+        return;
+      }
+
+      const paymentDeadline = this.getOnlinePaymentDeadline(payment.createdAt);
+      if (new Date() > paymentDeadline) {
+        await this.prisma.$transaction(async (tx) => {
+          await this.failOrderAndRestoreStock(tx, payment.orderId, {
+            providerTransactionId: transId
+          });
+        });
+
+        this.logger.warn(
+          `MoMo IPN: Payment expired for orderId=${txnRef}, deadline=${paymentDeadline.toISOString()}`
+        );
+        return;
+      }
+
+      // Verify amount
+      const paymentAmount = Number(payment.amount);
+      if (Math.round(paymentAmount) !== Math.round(momoAmount)) {
+        this.logger.warn(
+          `MoMo IPN: Amount mismatch for orderId=${txnRef}. ` +
+            `Expected=${paymentAmount}, Got=${momoAmount}`
+        );
+        return;
+      }
+
+      // Check if already processed (idempotency)
+      if (payment.status !== PaymentStatus.PENDING) {
+        this.logger.log(
+          `MoMo IPN: Payment already confirmed for orderId=${txnRef}`
+        );
+        return;
+      }
+
+      // resultCode === 0 means success in MoMo
+      const isSuccess = resultCode === 0;
+
+      await this.prisma.$transaction(async (tx) => {
+        if (isSuccess) {
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: PaymentStatus.SUCCESS,
+              providerTransactionId: transId
+            }
+          });
+
+          await tx.order.update({
+            where: { id: payment.orderId },
+            data: { status: OrderStatus.PAID }
+          });
+        } else {
+          await this.failOrderAndRestoreStock(tx, payment.orderId, {
+            providerTransactionId: transId
+          });
+        }
+      });
+
+      this.logger.log(
+        `MoMo IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} ` +
+          `for orderId=${txnRef}, transId=${transId}`
+      );
+    } catch (error) {
+      this.logger.error(`MoMo IPN: Error processing orderId=${txnRef}`, error);
+    }
+  }
+
+  /**
+   * Handle MoMo Redirect URL callback.
+   * Verifies the signature and returns payment result info for the frontend.
+   */
+  handleMomoReturn(query: Record<string, string>) {
+    const { isValid } = this.momoService.verifyRedirectSignature(query);
+
+    if (!isValid) {
+      return {
+        success: false,
+        message: 'Chữ ký không hợp lệ'
+      };
+    }
+
+    const resultCode = Number(query['resultCode']);
+    const isSuccess = resultCode === 0;
+
+    return {
+      success: isSuccess,
+      message: isSuccess
+        ? 'Giao dịch thành công'
+        : `Giao dịch không thành công. Mã lỗi: ${resultCode}`,
+      data: {
+        orderId: query['orderId'],
+        amount: Number(query['amount']),
+        orderInfo: query['orderInfo'],
+        transId: query['transId'],
+        resultCode
       }
     };
   }
@@ -771,6 +906,69 @@ export class OrderService {
 
     const paymentUrl = this.vnpayService.createPaymentUrl({
       ipAddr: ipAddr || '127.0.0.1',
+      txnRef: order.payment.code,
+      amount: Number(order.payment.amount),
+      orderInfo: `Thanh toan don hang ${order.code}`
+    });
+
+    return {
+      orderId: order.id,
+      paymentCode: order.payment.code,
+      paymentUrl,
+      expiresAt: paymentDeadline.toISOString()
+    };
+  }
+
+  async retryMyMomoPayment(orderId: string, userId: string) {
+    await this.expirePendingOnlineOrderById(orderId, userId);
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: orderId,
+        userId
+      },
+      include: {
+        payment: true
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Không tìm thấy đơn hàng với id ${orderId}`);
+    }
+
+    if (!order.payment) {
+      throw new ConflictException('Đơn hàng chưa có thông tin thanh toán');
+    }
+
+    if (order.payment.method !== PaymentMethod.MOMO) {
+      throw new BadRequestException(
+        'Chỉ hỗ trợ tạo lại link thanh toán cho MOMO'
+      );
+    }
+
+    if (
+      order.payment.status !== PaymentStatus.PENDING ||
+      order.status !== OrderStatus.PENDING
+    ) {
+      throw new ConflictException(
+        'Đơn hàng không còn ở trạng thái chờ thanh toán'
+      );
+    }
+
+    const paymentDeadline = this.getOnlinePaymentDeadline(
+      order.payment.createdAt
+    );
+    if (new Date() > paymentDeadline) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.failOrderAndRestoreStock(tx, order.id);
+      });
+
+      throw new ConflictException(
+        'Đơn hàng đã quá thời gian thanh toán 12 giờ và đã được hủy.'
+      );
+    }
+
+    const paymentUrl = await this.momoService.createPaymentUrl({
       txnRef: order.payment.code,
       amount: Number(order.payment.amount),
       orderInfo: `Thanh toan don hang ${order.code}`
