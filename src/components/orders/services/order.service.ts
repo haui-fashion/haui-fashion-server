@@ -11,6 +11,7 @@ import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderRepository } from '@components/orders/repositories/order.repository';
 import { ShippingService } from '@components/shipping/services/shipping.service';
+import { MailService } from '@core/modules/mail/services/mail.service';
 import { MoMoIpnBody, MoMoService } from '@core/modules/momo';
 import { EntityCodeService, PrismaService } from '@core/modules/prisma';
 import { VNPayService } from '@core/modules/vnpay';
@@ -31,6 +32,10 @@ import {
 } from '@prisma/client';
 
 const ONLINE_PAYMENT_TTL_HOURS = 1;
+const ORDER_DETAIL_URL_BASE = 'https://www.hauifashion.com/order';
+const ORDER_ITEM_PLACEHOLDER_IMAGE = 'https://placehold.co/80x80?text=No+Image';
+const ORDER_CANCELED_BY_ADMIN_LABEL = 'Quản trị viên';
+const ORDER_CANCELED_BY_SYSTEM_LABEL = 'Hệ thống';
 
 type CheckoutCartItem = {
   cartItemId: string;
@@ -65,6 +70,37 @@ type CheckoutCartItem = {
   };
 };
 
+type OrderEmailItem = {
+  name: string;
+  sku: string;
+  image: string;
+  price: number;
+  quantity: number;
+  total: number;
+};
+
+type OrderEmailPayload = {
+  id: string;
+  code: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  shippingAddress: {
+    fullname: string;
+    phone: string;
+    street: string;
+    wardName: string;
+    districtName: string;
+    provinceName: string;
+  };
+  items: OrderEmailItem[];
+  totalProductAmount: number;
+  shippingFee: number;
+  totalAmount: number;
+  paymentMethod: PaymentMethod;
+  paymentMethodLabel: string;
+};
+
 @Injectable()
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
@@ -73,6 +109,7 @@ export class OrderService {
     private readonly prisma: PrismaService,
     private readonly orderRepository: OrderRepository,
     private readonly entityCodeService: EntityCodeService,
+    private readonly mailService: MailService,
     private readonly shippingService: ShippingService,
     private readonly vnpayService: VNPayService,
     private readonly momoService: MoMoService
@@ -237,6 +274,8 @@ export class OrderService {
             orderInfo: `Thanh toan don hang ${orderCode}`
           });
 
+          await this.sendOrderCreatedEmail(created.id);
+
           return { ...created, paymentUrl };
         }
 
@@ -248,8 +287,12 @@ export class OrderService {
             orderInfo: `Thanh toan don hang ${orderCode}`
           });
 
+          await this.sendOrderCreatedEmail(created.id);
+
           return { ...created, paymentUrl };
         }
+
+        await this.sendOrderCreatedEmail(created.id);
 
         return created;
       } catch (error) {
@@ -308,11 +351,19 @@ export class OrderService {
 
       const paymentDeadline = this.getOnlinePaymentDeadline(payment.createdAt);
       if (new Date() > paymentDeadline) {
-        await this.prisma.$transaction(async (tx) => {
-          await this.failOrderAndRestoreStock(tx, payment.orderId, {
+        const canceled = await this.prisma.$transaction(async (tx) => {
+          return this.failOrderAndRestoreStock(tx, payment.orderId, {
             providerTransactionId: transactionNo || undefined
           });
         });
+
+        if (canceled) {
+          await this.sendOrderCanceledEmail(
+            payment.orderId,
+            this.getOnlinePaymentExpiredReason(),
+            ORDER_CANCELED_BY_SYSTEM_LABEL
+          );
+        }
 
         this.logger.warn(
           `VNPay IPN: Payment expired for txnRef=${txnRef}, deadline=${paymentDeadline.toISOString()}`
@@ -361,6 +412,10 @@ export class OrderService {
         `VNPay IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} ` +
           `for txnRef=${txnRef}, transactionNo=${transactionNo}`
       );
+
+      if (isSuccess) {
+        await this.sendPaymentSuccessEmail(payment.orderId);
+      }
 
       return { RspCode: '00', Message: 'Confirm Success' };
     } catch (error) {
@@ -447,11 +502,19 @@ export class OrderService {
 
       const paymentDeadline = this.getOnlinePaymentDeadline(payment.createdAt);
       if (new Date() > paymentDeadline) {
-        await this.prisma.$transaction(async (tx) => {
-          await this.failOrderAndRestoreStock(tx, payment.orderId, {
+        const canceled = await this.prisma.$transaction(async (tx) => {
+          return this.failOrderAndRestoreStock(tx, payment.orderId, {
             providerTransactionId: transId
           });
         });
+
+        if (canceled) {
+          await this.sendOrderCanceledEmail(
+            payment.orderId,
+            this.getOnlinePaymentExpiredReason(),
+            ORDER_CANCELED_BY_SYSTEM_LABEL
+          );
+        }
 
         this.logger.warn(
           `MoMo IPN: Payment expired for orderId=${txnRef}, deadline=${paymentDeadline.toISOString()}`
@@ -500,6 +563,10 @@ export class OrderService {
         `MoMo IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} ` +
           `for orderId=${txnRef}, transId=${transId}`
       );
+
+      if (isSuccess) {
+        await this.sendPaymentSuccessEmail(payment.orderId);
+      }
     } catch (error) {
       this.logger.error(`MoMo IPN: Error processing orderId=${txnRef}`, error);
     }
@@ -812,6 +879,13 @@ export class OrderService {
 
     const currentStatus = order.status;
     const nextStatus = dto.status;
+    const isCanceling =
+      currentStatus !== OrderStatus.CANCELED &&
+      nextStatus === OrderStatus.CANCELED;
+
+    if (isCanceling && !dto.cancelReason?.trim()) {
+      throw new BadRequestException('Vui lòng nhập lý do hủy đơn hàng');
+    }
 
     if (currentStatus !== nextStatus) {
       const allowedNextStatuses = STATUS_TRANSITIONS[currentStatus] ?? [];
@@ -829,10 +903,7 @@ export class OrderService {
     );
 
     await this.prisma.$transaction(async (tx) => {
-      if (
-        currentStatus !== OrderStatus.CANCELED &&
-        nextStatus === OrderStatus.CANCELED
-      ) {
+      if (isCanceling) {
         const rollbackItems = [...order.items].sort((a, b) =>
           a.variantId.localeCompare(b.variantId)
         );
@@ -875,6 +946,14 @@ export class OrderService {
     const updated = await this.orderRepository.findOneById(id);
     if (!updated) {
       throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
+    }
+
+    if (isCanceling) {
+      await this.sendOrderCanceledEmail(
+        id,
+        dto.cancelReason!.trim(),
+        ORDER_CANCELED_BY_ADMIN_LABEL
+      );
     }
 
     return updated;
@@ -920,9 +999,17 @@ export class OrderService {
       order.payment.createdAt
     );
     if (new Date() > paymentDeadline) {
-      await this.prisma.$transaction(async (tx) => {
-        await this.failOrderAndRestoreStock(tx, order.id);
+      const canceled = await this.prisma.$transaction(async (tx) => {
+        return this.failOrderAndRestoreStock(tx, order.id);
       });
+
+      if (canceled) {
+        await this.sendOrderCanceledEmail(
+          order.id,
+          this.getOnlinePaymentExpiredReason(),
+          ORDER_CANCELED_BY_SYSTEM_LABEL
+        );
+      }
 
       throw new ConflictException(
         'Đơn hàng đã quá thời gian thanh toán 12 giờ và đã được hủy.'
@@ -984,9 +1071,17 @@ export class OrderService {
       order.payment.createdAt
     );
     if (new Date() > paymentDeadline) {
-      await this.prisma.$transaction(async (tx) => {
-        await this.failOrderAndRestoreStock(tx, order.id);
+      const canceled = await this.prisma.$transaction(async (tx) => {
+        return this.failOrderAndRestoreStock(tx, order.id);
       });
+
+      if (canceled) {
+        await this.sendOrderCanceledEmail(
+          order.id,
+          this.getOnlinePaymentExpiredReason(),
+          ORDER_CANCELED_BY_SYSTEM_LABEL
+        );
+      }
 
       throw new ConflictException(
         'Đơn hàng đã quá thời gian thanh toán 12 giờ và đã được hủy.'
@@ -1080,9 +1175,17 @@ export class OrderService {
     });
 
     for (const order of expiredOrders) {
-      await this.prisma.$transaction(async (tx) => {
-        await this.failOrderAndRestoreStock(tx, order.id);
+      const canceled = await this.prisma.$transaction(async (tx) => {
+        return this.failOrderAndRestoreStock(tx, order.id);
       });
+
+      if (canceled) {
+        await this.sendOrderCanceledEmail(
+          order.id,
+          this.getOnlinePaymentExpiredReason(),
+          ORDER_CANCELED_BY_SYSTEM_LABEL
+        );
+      }
     }
   }
 
@@ -1117,15 +1220,27 @@ export class OrderService {
       return;
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await this.failOrderAndRestoreStock(tx, order.id);
+    const canceled = await this.prisma.$transaction(async (tx) => {
+      return this.failOrderAndRestoreStock(tx, order.id);
     });
+
+    if (canceled) {
+      await this.sendOrderCanceledEmail(
+        order.id,
+        this.getOnlinePaymentExpiredReason(),
+        ORDER_CANCELED_BY_SYSTEM_LABEL
+      );
+    }
   }
 
   private getOnlinePaymentDeadline(createdAt: Date): Date {
     return new Date(
       createdAt.getTime() + ONLINE_PAYMENT_TTL_HOURS * 60 * 60 * 1000
     );
+  }
+
+  private getOnlinePaymentExpiredReason(): string {
+    return `Đơn hàng quá thời gian thanh toán ${ONLINE_PAYMENT_TTL_HOURS} giờ và đã bị hủy tự động.`;
   }
 
   private async markOrderPaidFromPending(
@@ -1242,6 +1357,224 @@ export class OrderService {
     }
 
     return true;
+  }
+
+  private async sendOrderCreatedEmail(orderId: string): Promise<void> {
+    try {
+      const order = await this.getOrderEmailPayload(orderId);
+
+      if (!order) {
+        return;
+      }
+
+      if (!order.ownerEmail) {
+        this.logger.warn(
+          `Skip order confirmation email because owner email is missing for orderId=${orderId}`
+        );
+        return;
+      }
+
+      await this.mailService.sendTemplateEmail({
+        to: order.ownerEmail,
+        subject: `Cảm ơn bạn đã đặt hàng #${order.code}`,
+        template: 'order-success',
+        context: {
+          order,
+          orderUrl: `${ORDER_DETAIL_URL_BASE}/${order.id}`,
+          paymentTtlHours: ONLINE_PAYMENT_TTL_HOURS
+        }
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue order confirmation email for orderId=${orderId}`,
+        error instanceof Error ? error.stack : String(error)
+      );
+    }
+  }
+
+  private async sendPaymentSuccessEmail(orderId: string): Promise<void> {
+    try {
+      const order = await this.getOrderEmailPayload(orderId);
+
+      if (!order) {
+        return;
+      }
+
+      if (!order.ownerEmail) {
+        this.logger.warn(
+          `Skip payment success email because owner email is missing for orderId=${orderId}`
+        );
+        return;
+      }
+
+      await this.mailService.sendTemplateEmail({
+        to: order.ownerEmail,
+        subject: `Thanh toán thành công cho đơn hàng #${order.code}`,
+        template: 'payment-success',
+        context: {
+          order: {
+            id: order.id,
+            code: order.code,
+            ownerName: order.ownerName,
+            totalAmount: order.totalAmount,
+            paymentMethodLabel: order.paymentMethodLabel
+          },
+          orderUrl: `${ORDER_DETAIL_URL_BASE}/${order.id}`
+        }
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue payment success email for orderId=${orderId}`,
+        error instanceof Error ? error.stack : String(error)
+      );
+    }
+  }
+
+  private async sendOrderCanceledEmail(
+    orderId: string,
+    cancelReason: string,
+    canceledByLabel: string
+  ): Promise<void> {
+    try {
+      const order = await this.getOrderEmailPayload(orderId);
+
+      if (!order) {
+        return;
+      }
+
+      if (!order.ownerEmail) {
+        this.logger.warn(
+          `Skip order canceled email because owner email is missing for orderId=${orderId}`
+        );
+        return;
+      }
+
+      await this.mailService.sendTemplateEmail({
+        to: order.ownerEmail,
+        subject: `Đơn hàng #${order.code} đã bị hủy`,
+        template: 'order-canceled',
+        context: {
+          order: {
+            id: order.id,
+            code: order.code,
+            ownerName: order.ownerName,
+            totalAmount: order.totalAmount,
+            paymentMethodLabel: order.paymentMethodLabel
+          },
+          cancelReason,
+          canceledByLabel,
+          orderUrl: `${ORDER_DETAIL_URL_BASE}/${order.id}`
+        }
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue order canceled email for orderId=${orderId}`,
+        error instanceof Error ? error.stack : String(error)
+      );
+    }
+  }
+
+  private async getOrderEmailPayload(
+    orderId: string
+  ): Promise<OrderEmailPayload | null> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        payment: true
+      }
+    });
+
+    if (!order || !order.payment) {
+      return null;
+    }
+
+    const userSnapshot = this.asJsonObject(order.userSnapshot);
+    const shippingAddress = this.asJsonObject(order.shippingAddress);
+
+    const ownerName =
+      this.readJsonString(userSnapshot, 'fullname') ||
+      this.readJsonString(shippingAddress, 'fullname') ||
+      'Khách hàng';
+    const ownerEmail = this.readJsonString(userSnapshot, 'email') || '';
+    const ownerPhone = this.readJsonString(shippingAddress, 'phone') || '';
+
+    const items: OrderEmailItem[] = order.items.map((item) => {
+      const productSnapshot = this.asJsonObject(item.productSnapshot);
+      const price = Number(item.price);
+
+      return {
+        name:
+          this.readJsonString(productSnapshot, 'productName') ||
+          this.readJsonString(productSnapshot, 'name') ||
+          'Sản phẩm',
+        sku: this.readJsonString(productSnapshot, 'sku') || '-',
+        image:
+          this.readJsonString(productSnapshot, 'image') ||
+          ORDER_ITEM_PLACEHOLDER_IMAGE,
+        price,
+        quantity: item.quantity,
+        total: price * item.quantity
+      };
+    });
+
+    return {
+      id: order.id,
+      code: order.code,
+      ownerName,
+      ownerEmail,
+      ownerPhone,
+      shippingAddress: {
+        fullname: this.readJsonString(shippingAddress, 'fullname') || ownerName,
+        phone: ownerPhone,
+        street: this.readJsonString(shippingAddress, 'street') || '-',
+        wardName: this.readJsonString(shippingAddress, 'wardName') || '-',
+        districtName:
+          this.readJsonString(shippingAddress, 'districtName') || '-',
+        provinceName:
+          this.readJsonString(shippingAddress, 'provinceName') || '-'
+      },
+      items,
+      totalProductAmount: Number(order.totalProductAmount),
+      shippingFee: Number(order.shippingFee),
+      totalAmount: Number(order.totalAmount),
+      paymentMethod: order.payment.method,
+      paymentMethodLabel: this.resolvePaymentMethodLabel(order.payment.method)
+    };
+  }
+
+  private resolvePaymentMethodLabel(method: PaymentMethod): string {
+    switch (method) {
+      case PaymentMethod.COD:
+        return 'Thanh toán khi nhận hàng (COD)';
+      case PaymentMethod.VNPAY:
+        return 'VNPay';
+      case PaymentMethod.MOMO:
+        return 'MoMo';
+      default:
+        return method;
+    }
+  }
+
+  private asJsonObject(value: Prisma.JsonValue): Prisma.JsonObject {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return {};
+    }
+
+    return value;
+  }
+
+  private readJsonString(
+    source: Prisma.JsonObject,
+    key: string
+  ): string | null {
+    const value = source[key];
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private isCodeConflictError(error: unknown): boolean {

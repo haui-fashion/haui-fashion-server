@@ -1,0 +1,45 @@
+<%
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND'
+    }).format(Number(price) || 0);
+  };
+
+  const bodyContent = `
+    <h2 style="color: #1a1a1a; margin-top: 0;">Đơn hàng đã bị hủy</h2>
+
+    <p>Xin chào ${locals.order.ownerName},</p>
+    <p>Đơn hàng <strong>#${locals.order.code}</strong> đã được cập nhật sang trạng thái <strong>Đã hủy</strong>.</p>
+
+    <div style="background-color: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin: 20px 0;">
+      <p style="margin: 6px 0; color: #7c2d12;"><strong>Lý do hủy:</strong> ${locals.cancelReason}</p>
+      <p style="margin: 6px 0; color: #7c2d12;"><strong>Nguồn cập nhật:</strong> ${locals.canceledByLabel}</p>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+      <tr>
+        <td style="padding: 6px 0; color: #6b7280;">Mã đơn hàng</td>
+        <td style="padding: 6px 0; text-align: right; color: #111827; font-weight: 600;">#${locals.order.code}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #6b7280;">Tổng thanh toán</td>
+        <td style="padding: 6px 0; text-align: right; color: #111827; font-weight: 600;">${formatPrice(locals.order.totalAmount)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #6b7280;">Phương thức thanh toán</td>
+        <td style="padding: 6px 0; text-align: right; color: #111827; font-weight: 600;">${locals.order.paymentMethodLabel}</td>
+      </tr>
+    </table>
+
+    <p style="margin-top: 18px;">Nếu bạn cần hỗ trợ thêm, vui lòng liên hệ đội ngũ chăm sóc khách hàng của HaUI Fashion.</p>
+
+    <div style="text-align: center; margin-top: 24px;">
+      <a href="${locals.orderUrl}" class="button">Xem chi tiết đơn hàng</a>
+    </div>
+
+    <p style="margin-bottom: 0;">Trân trọng,<br>Đội ngũ HaUI Fashion</p>
+  `;
+%>
+
+<%- await include('layouts/base', { body: bodyContent }) %>

@@ -6,7 +6,9 @@ import { Public } from '@core/utilities/decorators/public.decorator';
 import { Body, Controller, Get, Post, Patch } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  ForgotPasswordDto,
   LoginDto,
+  ResetPasswordDto,
   RefreshTokenDto,
   RegisterDto,
   UpdateProfileDto,
@@ -35,6 +37,18 @@ export class AuthController {
   @Post('refresh')
   async refreshToken(@Body() dto: RefreshTokenDto) {
     return this.authService.refreshToken(dto);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @Get('me')

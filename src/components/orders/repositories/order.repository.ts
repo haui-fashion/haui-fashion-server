@@ -18,7 +18,15 @@ const orderInclude = Prisma.validator<Prisma.OrderInclude>()({
       email: true
     }
   },
-  items: true,
+  items: {
+    include: {
+      variant: {
+        include: {
+          product: true
+        }
+      }
+    }
+  },
   payment: true
 });
 

@@ -1,0 +1,32 @@
+<%
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND'
+    }).format(Number(price) || 0);
+  };
+
+  const bodyContent = `
+    <h2 style="color: #111827; margin-top: 0;">Thanh toán thành công</h2>
+
+    <p>Xin chào ${locals.order.ownerName},</p>
+    <p>Thanh toán cho đơn hàng <strong>#${locals.order.code}</strong> đã được xác nhận thành công.</p>
+
+    <div style="background-color: #ecfeff; border: 1px solid #a5f3fc; border-radius: 8px; padding: 16px; margin: 20px 0;">
+      <p style="margin: 6px 0; color: #0f172a;"><strong>Mã đơn hàng:</strong> #${locals.order.code}</p>
+      <p style="margin: 6px 0; color: #0f172a;"><strong>Số tiền đã thanh toán:</strong> ${formatPrice(locals.order.totalAmount)}</p>
+      <p style="margin: 6px 0; color: #0f172a;"><strong>Phương thức thanh toán:</strong> ${locals.order.paymentMethodLabel}</p>
+      <p style="margin: 6px 0; color: #0f172a;"><strong>Trạng thái:</strong> Thành công</p>
+    </div>
+
+    <p>Chúng tôi sẽ tiếp tục xử lý đơn hàng và cập nhật cho bạn ở các bước tiếp theo.</p>
+
+    <div style="text-align: center; margin-top: 24px;">
+      <a href="${locals.orderUrl}" style="display: inline-block; padding: 12px 24px; background-color: #111827; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Xem đơn hàng</a>
+    </div>
+
+    <p style="margin-top: 24px; margin-bottom: 0;">Cảm ơn bạn đã tin tưởng HaUI Fashion.</p>
+  `;
+%>
+
+<%- await include('layouts/base', { body: bodyContent }) %>

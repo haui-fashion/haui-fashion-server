@@ -27,7 +27,10 @@ export default () => {
       name: process.env.SERVER_NAME || 'nest-app',
       env: process.env.NODE_ENV || 'development',
       port: parseInt(process.env.PORT || '3000', 10),
-      corsOrigins: process.env.CORS_ORIGINS || '*'
+      corsOrigins: process.env.CORS_ORIGINS || '*',
+      resetPasswordUrl:
+        process.env.RESET_PASSWORD_URL ||
+        'https://www.hauifashion.com/reset-password'
     },
     timezone: process.env.APP_TIMEZONE || 'Asia/Ho_Chi_Minh',
     database: {

@@ -1,95 +1,98 @@
 <%
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
-  };
-  
-  let itemsHtml = locals.order.items.map(item => {
-    let variantInfo = '';
-    if (item.productSnapshot.variantName) {
-      variantInfo = item.productSnapshot.variantName;
-    } else if (item.productSnapshot.options) {
-      variantInfo = Object.values(item.productSnapshot.options).join(' / ');
-    } else if (item.productSnapshot.size && item.productSnapshot.color) {
-      variantInfo = `${item.productSnapshot.color} / ${item.productSnapshot.size}`;
-    }
-    
-    // Fallback image if not present
-    const imageUrl = item.productSnapshot.image || 'https://placehold.co/80x80?text=No+Image';
+    const formatPrice = (price) => {
+        return new Intl.NumberFormat('vi-VN', {
+            style: 'currency',
+            currency: 'VND'
+        }).format(Number(price) || 0);
+    };
 
-    return `
-      <tr>
-          <td style="padding: 15px 0; border-bottom: 1px dashed #e5e7eb; width: 60px;">
-              <img src="${imageUrl}" alt="${item.productSnapshot.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #eee;" />
-          </td>
-          <td style="padding: 15px 0 15px 15px; border-bottom: 1px dashed #e5e7eb;">
-              <div style="font-weight: 600; color: #1a1a1a;">${item.productSnapshot.name}</div>
-              <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">
-                  ${variantInfo}
-              </div>
-          </td>
-          <td style="padding: 15px 0; border-bottom: 1px dashed #e5e7eb; text-align: center; color: #4b5563;">
-              ${item.quantity}
-          </td>
-          <td style="padding: 15px 0; border-bottom: 1px dashed #e5e7eb; text-align: right; font-weight: 500; color: #1a1a1a;">
-              ${formatPrice(item.price)}
-          </td>
-      </tr>
-    `;
-  }).join('');
-
-  let bodyContent = `
-    <h2 style="color: #1a1a1a; margin-top: 0;">Order Confirmation</h2>
-    
-    <p>Dear ${locals.order.shippingAddress.fullname},</p>
-    <p>Thank you for your order! We've received your order <strong>#${locals.order.code}</strong> and we're getting it ready for you.</p>
-    
-    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin: 24px 0;">
-        <h3 style="margin-top: 0; color: #1a1a1a; font-size: 18px; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Order Details</h3>
-        
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-            <thead>
+    const itemsHtml = (locals.order.items || [])
+        .map((item) => {
+            return `
                 <tr>
-                    <th colspan="2" style="text-align: left; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-size: 14px; font-weight: 600;">Item</th>
-                    <th style="text-align: center; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-size: 14px; font-weight: 600;">Qty</th>
-                    <th style="text-align: right; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-size: 14px; font-weight: 600;">Price</th>
+                    <td style="padding: 12px 0; border-bottom: 1px dashed #e5e7eb; width: 72px;">
+                        <img src="${item.image}" alt="${item.name}" style="width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb;" />
+                    </td>
+                    <td style="padding: 12px 12px; border-bottom: 1px dashed #e5e7eb; vertical-align: top;">
+                        <div style="font-weight: 600; color: #111827;">${item.name}</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">SKU: ${item.sku}</div>
+                    </td>
+                    <td style="padding: 12px 8px; border-bottom: 1px dashed #e5e7eb; text-align: right; color: #374151;">${formatPrice(item.price)}</td>
+                    <td style="padding: 12px 8px; border-bottom: 1px dashed #e5e7eb; text-align: center; color: #374151;">${item.quantity}</td>
+                    <td style="padding: 12px 0; border-bottom: 1px dashed #e5e7eb; text-align: right; color: #111827; font-weight: 600;">${formatPrice(item.total)}</td>
                 </tr>
-            </thead>
-            <tbody>
-                ${itemsHtml}
-            </tbody>
+            `;
+        })
+        .join('');
+
+    const bodyContent = `
+        <h2 style="color: #111827; margin-top: 0;">Cảm ơn bạn đã đặt hàng</h2>
+
+        <p>Xin chào ${locals.order.ownerName},</p>
+        <p>Chúng tôi đã tiếp nhận thành công đơn hàng <strong>#${locals.order.code}</strong> của bạn.</p>
+
+        <div style="background-color: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; margin: 20px 0;">
+            <h3 style="margin: 0 0 10px; color: #111827; font-size: 16px;">Thông tin người đặt</h3>
+            <p style="margin: 6px 0; color: #374151;"><strong>Họ tên:</strong> ${locals.order.ownerName}</p>
+            <p style="margin: 6px 0; color: #374151;"><strong>Email:</strong> ${locals.order.ownerEmail}</p>
+            <p style="margin: 6px 0; color: #374151;"><strong>Số điện thoại:</strong> ${locals.order.ownerPhone || '-'}</p>
+        </div>
+
+        <div style="background-color: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; margin: 20px 0;">
+            <h3 style="margin: 0 0 10px; color: #111827; font-size: 16px;">Địa chỉ giao hàng</h3>
+            <p style="margin: 6px 0; color: #374151;"><strong>Người nhận:</strong> ${locals.order.shippingAddress.fullname}</p>
+            <p style="margin: 6px 0; color: #374151;"><strong>Số điện thoại:</strong> ${locals.order.shippingAddress.phone || '-'}</p>
+            <p style="margin: 6px 0; color: #374151;"><strong>Địa chỉ:</strong> ${locals.order.shippingAddress.street}, ${locals.order.shippingAddress.wardName}, ${locals.order.shippingAddress.districtName}, ${locals.order.shippingAddress.provinceName}</p>
+        </div>
+
+        <div style="margin: 24px 0;">
+            <h3 style="margin: 0 0 12px; color: #111827; font-size: 16px;">Chi tiết đơn hàng</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left; color: #6b7280; font-size: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;" colspan="2">Sản phẩm</th>
+                        <th style="text-align: right; color: #6b7280; font-size: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">Đơn giá</th>
+                        <th style="text-align: center; color: #6b7280; font-size: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">SL</th>
+                        <th style="text-align: right; color: #6b7280; font-size: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+            </table>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+            <tr>
+                <td style="padding: 6px 0; color: #6b7280;">Tổng tiền sản phẩm</td>
+                <td style="padding: 6px 0; text-align: right; color: #111827; font-weight: 500;">${formatPrice(locals.order.totalProductAmount)}</td>
+            </tr>
+            <tr>
+                <td style="padding: 6px 0; color: #6b7280;">Phí vận chuyển</td>
+                <td style="padding: 6px 0; text-align: right; color: #111827; font-weight: 500;">${formatPrice(locals.order.shippingFee)}</td>
+            </tr>
+            <tr>
+                <td style="padding: 6px 0; color: #6b7280;">Phương thức thanh toán</td>
+                <td style="padding: 6px 0; text-align: right; color: #111827; font-weight: 500;">${locals.order.paymentMethodLabel}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px 0; color: #111827; font-weight: 700; font-size: 16px; border-top: 1px solid #e5e7eb;">Tổng thanh toán</td>
+                <td style="padding: 10px 0; text-align: right; color: #0f4c81; font-weight: 700; font-size: 18px; border-top: 1px solid #e5e7eb;">${formatPrice(locals.order.totalAmount)}</td>
+            </tr>
         </table>
-        
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-            <tr>
-                <td style="padding: 8px 0; color: #6b7280;">Subtotal:</td>
-                <td style="padding: 8px 0; text-align: right; font-weight: 500; color: #1a1a1a;">${formatPrice(locals.order.totalProductAmount)}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0; color: #6b7280;">Shipping Fee:</td>
-                <td style="padding: 8px 0; text-align: right; font-weight: 500; color: #1a1a1a;">${formatPrice(locals.order.shippingFee)}</td>
-            </tr>
-            <tr>
-                <td style="padding: 12px 0; color: #1a1a1a; font-weight: 600; font-size: 16px; border-top: 1px solid #e5e7eb;">Total:</td>
-                <td style="padding: 12px 0; text-align: right; font-weight: 700; font-size: 18px; color: #0070f3; border-top: 1px solid #e5e7eb;">${formatPrice(locals.order.totalAmount)}</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div style="margin-top: 24px;">
-        <h3 style="margin-top: 0; color: #1a1a1a; font-size: 16px;">Shipping Information</h3>
-        <p style="color: #4b5563; font-size: 14px; margin: 4px 0;"><strong>Name:</strong> ${locals.order.shippingAddress.fullname}</p>
-        <p style="color: #4b5563; font-size: 14px; margin: 4px 0;"><strong>Phone:</strong> ${locals.order.shippingAddress.phone}</p>
-        <p style="color: #4b5563; font-size: 14px; margin: 4px 0;"><strong>Address:</strong> ${locals.order.shippingAddress.street}, ${locals.order.shippingAddress.wardName}, ${locals.order.shippingAddress.districtName}, ${locals.order.shippingAddress.provinceName}</p>
-    </div>
-    
-    <p style="margin-top: 30px;">We will notify you once your order has been shipped. If you have any questions, feel free to contact our support team.</p>
-    
-    <div style="text-align: center; margin-top: 24px;">
-        <a href="${locals.trackingUrl || '#'}" style="display: inline-block; padding: 12px 24px; background-color: #0070f3; color: #ffffff; text-decoration: none; border-radius: 4px; font-weight: 600;">View Order Status</a>
-    </div>
-    
-    <p style="margin-bottom: 0;">Best regards,<br>The E-Commerce Team</p>
-  `;
+
+        ${
+            locals.order.paymentMethod !== 'COD'
+                ? `<p style="margin-top: 20px; color: #b45309; background: #fffbeb; border: 1px solid #fef3c7; padding: 12px; border-radius: 6px;">Nếu đơn hàng không được thanh toán trong vòng ${locals.paymentTtlHours} giờ, đơn sẽ tự động bị hủy.</p>`
+                : ''
+        }
+
+        <div style="text-align: center; margin-top: 24px;">
+            <a href="${locals.orderUrl}" style="display: inline-block; padding: 12px 24px; background-color: #111827; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Xem đơn hàng</a>
+        </div>
+
+        <p style="margin-top: 24px; margin-bottom: 0;">Cảm ơn bạn đã mua sắm tại HaUI Fashion.</p>
+    `;
 %>
 
 <%- await include('layouts/base', { body: bodyContent }) %>
