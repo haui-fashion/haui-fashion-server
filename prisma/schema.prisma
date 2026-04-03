@@ -74,6 +74,7 @@ model User {
   password String
   role     Role    @default(CUSTOMER)
   isActive Boolean @default(true) @map("is_active")
+  isVerified Boolean @default(false) @map("is_verified")
 
   phone       String?
   dateOfBirth DateTime? @map("date_of_birth")

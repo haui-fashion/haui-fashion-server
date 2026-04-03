@@ -28,6 +28,9 @@ export default () => {
       env: process.env.NODE_ENV || 'development',
       port: parseInt(process.env.PORT || '3000', 10),
       corsOrigins: process.env.CORS_ORIGINS || '*',
+      verifyEmailUrl:
+        process.env.VERIFY_EMAIL_URL ||
+        'https://www.hauifashion.com/verify-email',
       resetPasswordUrl:
         process.env.RESET_PASSWORD_URL ||
         'https://www.hauifashion.com/reset-password'

@@ -3,7 +3,7 @@ import {
   CurrentUserDto
 } from '@core/utilities/decorators/current-user.decorator';
 import { Public } from '@core/utilities/decorators/public.decorator';
-import { Body, Controller, Get, Post, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Post, Patch, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   ForgotPasswordDto,
@@ -11,6 +11,7 @@ import {
   ResetPasswordDto,
   RefreshTokenDto,
   RegisterDto,
+  VerifyEmailDto,
   UpdateProfileDto,
   ChangePasswordDto
 } from '../dtos';
@@ -46,9 +47,27 @@ export class AuthController {
   }
 
   @Public()
+  @Post('resend-verify-email')
+  async resendVerifyEmail(@Body() dto: ForgotPasswordDto) {
+    return this.authService.resendVerifyEmail(dto);
+  }
+
+  @Public()
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Public()
+  @Post('verify-email')
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Public()
+  @Get('verify-email')
+  async verifyEmailByQuery(@Query() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
   }
 
   @Get('me')

@@ -1,5 +1,6 @@
 import { Label } from '@core/utilities/decorators/label.decorator';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -56,4 +57,9 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender;
+
+  @Label('Đã xác minh email')
+  @IsOptional()
+  @IsBoolean()
+  isVerified?: boolean;
 }

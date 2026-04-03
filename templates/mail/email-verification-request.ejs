@@ -1,0 +1,16 @@
+<%- await include('layouts/base', { body: `
+    <h2 style="color: #1a1a1a; margin-top: 0;">Xác minh email tài khoản</h2>
+
+    <p>Xin chào ${locals.name},</p>
+
+    <p>Cảm ơn bạn đã đăng ký tài khoản tại HaUI Fashion.</p>
+    <p>Vui lòng bấm vào nút bên dưới để xác minh email. Liên kết sẽ hết hạn sau <strong>${locals.expiredInHours} giờ</strong>.</p>
+
+    <div style="text-align: center;">
+        <a href="${locals.verifyUrl}" class="button">Xác minh email</a>
+    </div>
+
+    <p>Nếu bạn không tạo tài khoản này, bạn có thể bỏ qua email này.</p>
+
+    <p style="margin-bottom: 0;">Trân trọng,<br>Đội ngũ HaUI Fashion</p>
+` }) %>

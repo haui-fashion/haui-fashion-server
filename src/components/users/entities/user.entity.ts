@@ -30,6 +30,10 @@ export class UserEntity extends BaseEntity {
 
   @Expose()
   @ApiProperty()
+  isVerified: boolean;
+
+  @Expose()
+  @ApiProperty()
   @Type(() => AddressEntity)
   addresses?: AddressEntity[];
 }

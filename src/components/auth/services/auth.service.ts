@@ -26,10 +26,12 @@ import {
   RefreshTokenDto,
   RegisterDto,
   ResetPasswordDto,
+  VerifyEmailDto,
   UpdateProfileDto
 } from '../dtos';
 
 const ACCOUNT_PROFILE_URL = 'https://www.hauifashion.com/profile';
+const VERIFY_EMAIL_URL_BASE = 'https://www.hauifashion.com/verify-email';
 const RESET_PASSWORD_URL_BASE = 'https://www.hauifashion.com/reset-password';
 
 @Injectable()
@@ -45,7 +47,7 @@ export class AuthService {
     private readonly configService: ConfigService
   ) {}
 
-  async register(dto: RegisterDto): Promise<TokenPair> {
+  async register(dto: RegisterDto): Promise<{ message: string }> {
     const existingUser =
       await this.userService.findByEmailOrNullIncludingDeleted(dto.email);
     if (existingUser) {
@@ -62,7 +64,8 @@ export class AuthService {
           username,
           fullname: dto.fullname,
           email: dto.email,
-          password: dto.password
+          password: dto.password,
+          isVerified: false
         });
         break;
       } catch (error) {
@@ -83,12 +86,12 @@ export class AuthService {
     }
 
     await this.cartService.ensureCartByUserId(user.id);
+    await this.sendVerifyEmail(user.id, user.email, user.fullname);
 
-    return this.appJwtService.generateTokenPair({
-      sub: user.id,
-      email: user.email,
-      role: user.role
-    });
+    return {
+      message:
+        'Đăng ký thành công. Vui lòng kiểm tra email để xác minh tài khoản trước khi đăng nhập.'
+    };
   }
 
   async login(dto: LoginDto): Promise<TokenPair> {
@@ -99,6 +102,12 @@ export class AuthService {
 
     if (!user.isActive) {
       throw new UnauthorizedException('Tài khoản đã bị khóa hoặc vô hiệu hóa');
+    }
+
+    if (!user.isVerified) {
+      throw new UnauthorizedException(
+        'Tài khoản chưa được xác minh email. Vui lòng kiểm tra hộp thư để xác minh.'
+      );
     }
 
     const isPasswordValid = await UserService.isPasswordMatch(
@@ -129,6 +138,10 @@ export class AuthService {
         throw new UnauthorizedException(
           'Tài khoản đã bị khóa hoặc vô hiệu hóa'
         );
+      }
+
+      if (!user.isVerified) {
+        throw new UnauthorizedException('Tài khoản chưa được xác minh email');
       }
 
       return this.appJwtService.generateTokenPair({
@@ -256,6 +269,40 @@ export class AuthService {
     return genericResponse;
   }
 
+  async resendVerifyEmail(dto: ForgotPasswordDto) {
+    const genericResponse = {
+      message:
+        'Nếu email chưa xác minh và còn hiệu lực, chúng tôi đã gửi lại liên kết xác minh.'
+    };
+    const cooldownResponse = {
+      message: 'Bạn vừa gửi yêu cầu trước đó. Vui lòng thử lại sau 1 phút.'
+    };
+
+    const email = dto.email.trim().toLowerCase();
+    const cooldownKey = AppCacheKeys.emailVerificationCooldown(email);
+    const isInCooldown = await this.appCacheService.get<boolean>(cooldownKey);
+
+    if (isInCooldown) {
+      return cooldownResponse;
+    }
+
+    await this.appCacheService.set(
+      cooldownKey,
+      true,
+      AppCacheTtl.emailVerificationCooldown
+    );
+
+    const user = await this.userService.findByEmailOrNull(email);
+
+    if (!user || !user.isActive || user.isVerified) {
+      return genericResponse;
+    }
+
+    await this.sendVerifyEmail(user.id, user.email, user.fullname);
+
+    return genericResponse;
+  }
+
   async resetPassword(dto: ResetPasswordDto) {
     const cacheKey = AppCacheKeys.passwordReset(dto.token);
     const cachedReset = await this.appCacheService.get<{
@@ -301,6 +348,83 @@ export class AuthService {
     };
   }
 
+  async verifyEmail(dto: VerifyEmailDto) {
+    const cacheKey = AppCacheKeys.emailVerification(dto.token);
+    const cachedVerify = await this.appCacheService.get<{
+      userId: string;
+      secretHash: string;
+    }>(cacheKey);
+
+    if (!cachedVerify) {
+      throw new ConflictException(
+        'Liên kết xác minh email không hợp lệ hoặc đã hết hạn'
+      );
+    }
+
+    const providedSecretHash = this.hashSecret(dto.secret);
+    if (!this.isHashEqual(providedSecretHash, cachedVerify.secretHash)) {
+      throw new ConflictException(
+        'Liên kết xác minh email không hợp lệ hoặc đã hết hạn'
+      );
+    }
+
+    const user = await this.userService.findById(cachedVerify.userId);
+    if (!user.isActive) {
+      throw new ConflictException('Tài khoản đã bị khóa hoặc vô hiệu hóa');
+    }
+
+    if (!user.isVerified) {
+      await this.userService.update(user.id, {
+        isVerified: true
+      });
+    }
+
+    await this.appCacheService.del(cacheKey);
+
+    return {
+      message: 'Xác minh email thành công. Bạn có thể đăng nhập ngay bây giờ.'
+    };
+  }
+
+  private async sendVerifyEmail(
+    userId: string,
+    email: string,
+    fullname: string
+  ): Promise<void> {
+    const token = randomBytes(16).toString('hex');
+    const secret = randomBytes(32).toString('hex');
+    const secretHash = this.hashSecret(secret);
+
+    await this.appCacheService.set(
+      AppCacheKeys.emailVerification(token),
+      {
+        userId,
+        secretHash
+      },
+      AppCacheTtl.emailVerification
+    );
+
+    const verifyUrl = this.buildVerifyEmailUrl(token, secret);
+
+    try {
+      await this.mailService.sendTemplateEmail({
+        to: email,
+        subject: 'Xác minh tài khoản HaUI Fashion',
+        template: 'email-verification-request',
+        context: {
+          name: fullname,
+          verifyUrl,
+          expiredInHours: Math.floor(AppCacheTtl.emailVerification / 3600000)
+        }
+      });
+    } catch (error) {
+      this.logger.error(
+        `Không thể gửi email xác minh tài khoản tới ${email}`,
+        error instanceof Error ? error.stack : String(error)
+      );
+    }
+  }
+
   private async sendPasswordChangedEmail(
     email: string,
     fullname: string
@@ -336,6 +460,18 @@ export class AuthService {
       'app.resetPasswordUrl'
     );
     const baseUrl = configuredBaseUrl || RESET_PASSWORD_URL_BASE;
+    const url = new URL(baseUrl);
+
+    url.searchParams.set('token', token);
+    url.searchParams.set('secret', secret);
+
+    return url.toString();
+  }
+
+  private buildVerifyEmailUrl(token: string, secret: string): string {
+    const configuredBaseUrl =
+      this.configService.get<string>('app.verifyEmailUrl');
+    const baseUrl = configuredBaseUrl || VERIFY_EMAIL_URL_BASE;
     const url = new URL(baseUrl);
 
     url.searchParams.set('token', token);
