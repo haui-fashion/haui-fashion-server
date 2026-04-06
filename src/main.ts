@@ -12,6 +12,18 @@ async function bootstrap() {
     bufferLogs: true
   });
 
+  const httpAdapter = app.getHttpAdapter();
+  const instance = httpAdapter.getInstance() as {
+    set?: (name: string, value: unknown) => void;
+    setTrustProxy?: (value: boolean | number | string) => void;
+  };
+
+  if (typeof instance.setTrustProxy === 'function') {
+    instance.setTrustProxy(true);
+  } else if (typeof instance.set === 'function') {
+    instance.set('trust proxy', true);
+  }
+
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   app.use(helmet());

@@ -17,12 +17,35 @@ export class LoggingInterceptor implements NestInterceptor {
     @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger
   ) {}
 
+  private getClientIp(request: Request): string {
+    const forwardedFor = request.headers['x-forwarded-for'];
+    if (forwardedFor) {
+      const firstIp = Array.isArray(forwardedFor)
+        ? forwardedFor[0]
+        : forwardedFor.split(',')[0];
+      return this.normalizeIp(firstIp.trim());
+    }
+
+    const realIp = request.headers['x-real-ip'];
+    if (realIp) {
+      const ip = Array.isArray(realIp) ? realIp[0] : realIp;
+      return this.normalizeIp(ip.trim());
+    }
+
+    return this.normalizeIp(request.ip || request.socket.remoteAddress || '');
+  }
+
+  private normalizeIp(ip: string): string {
+    return ip.startsWith('::ffff:') ? ip.replace('::ffff:', '') : ip;
+  }
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const ctx = context.switchToHttp();
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
 
-    const { method, originalUrl, ip } = request;
+    const { method, originalUrl } = request;
+    const ip = this.getClientIp(request);
     const userAgent = request.get('user-agent') || '';
     const startTime = Date.now();
 
