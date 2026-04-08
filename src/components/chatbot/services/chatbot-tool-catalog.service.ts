@@ -262,14 +262,15 @@ export class ChatbotToolCatalogService {
     {
       name: 'get_faq_answer',
       description:
-        'Retrieve answer from FAQ knowledge base for customer support questions.',
+        'Retrieve answer from FAQ knowledge base for customer support questions about shipping, payment, returns, product size, account, or general inquiries.',
       intents: ['UNKNOWN', 'SMALL_TALK', 'SEARCH_PRODUCT', 'MANAGE_ORDER'],
       requiresAuth: false,
       parameters: {
         type: 'object',
         properties: {
           question: {
-            type: 'string'
+            type: 'string',
+            description: 'Customer question to look up in FAQ knowledge base.'
           },
           topic: {
             type: 'string',
@@ -279,8 +280,11 @@ export class ChatbotToolCatalogService {
               'return',
               'warranty',
               'account',
+              'size_guide',
               'general'
-            ]
+            ],
+            description:
+              'Optional topic category to narrow search: shipping (giao hàng), payment (thanh toán), return (đổi trả), warranty (bảo hành), account (tài khoản), size_guide (hướng dẫn size), general (liên hệ, hàng chính hãng).'
           }
         },
         required: ['question']
@@ -289,7 +293,7 @@ export class ChatbotToolCatalogService {
     {
       name: 'get_policy_content',
       description:
-        'Return official policy content such as return, refund, shipping or privacy policy.',
+        'Return full official policy content. Use this when customers ask about policies, rules, or want to read detailed documentation.',
       intents: ['UNKNOWN', 'SMALL_TALK', 'SEARCH_PRODUCT', 'MANAGE_ORDER'],
       requiresAuth: false,
       parameters: {
@@ -303,8 +307,12 @@ export class ChatbotToolCatalogService {
               'shipping',
               'warranty',
               'privacy',
-              'payment'
-            ]
+              'payment',
+              'size_guide',
+              'terms_of_service'
+            ],
+            description:
+              'Policy type: return (đổi trả), refund (hoàn tiền), shipping (vận chuyển), warranty (bảo hành), privacy (bảo mật), payment (thanh toán), size_guide (hướng dẫn size), terms_of_service (điều khoản dịch vụ).'
           }
         },
         required: ['policy_type']

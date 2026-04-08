@@ -74,6 +74,29 @@ export class ProductService {
     return this.toProductResponse(product as any);
   }
 
+  async findBestSellers(limit: number = 8) {
+    const result = await this.productRepository.findBestSellers(limit);
+    return {
+      ...result,
+      items: result.items.map((item) => this.toProductListResponse(item as any))
+    };
+  }
+
+  async findRecommendations(productId: string, limit: number = 8) {
+    const product = await this.productRepository.findById(productId);
+    const categoryId = product?.categoryId || null;
+
+    const result = await this.productRepository.findRecommendations(
+      productId,
+      categoryId,
+      limit
+    );
+    return {
+      ...result,
+      items: result.items.map((item) => this.toProductListResponse(item as any))
+    };
+  }
+
   async create(dto: CreateProductDto) {
     const slug = dto.slug || this.generateSlug(dto.name);
 
@@ -864,6 +887,7 @@ export class ProductService {
       minVariantPrice: product.minVariantPrice ?? null,
       maxVariantPrice: product.maxVariantPrice ?? null,
       totalVariantStock: product.totalVariantStock ?? 0,
+      hexColors: product.hexColors ?? [],
       createdAt: product.createdAt,
       updatedAt: product.updatedAt
     };

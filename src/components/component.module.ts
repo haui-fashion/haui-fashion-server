@@ -11,6 +11,7 @@ import { ReviewsModule } from '@components/reviews/reviews.module';
 import { ShippingModule } from '@components/shipping/shipping.module';
 import { UserModule } from '@components/users/users.module';
 import { VariantsModule } from '@components/variants/variants.module';
+import { ReportsModule } from '@components/reports/reports.module';
 import { Module } from '@nestjs/common';
 
 @Module({
@@ -27,7 +28,8 @@ import { Module } from '@nestjs/common';
     ProductsModule,
     ReviewsModule,
     VariantsModule,
-    ShippingModule
+    ShippingModule,
+    ReportsModule
   ],
   controllers: [],
   providers: [],

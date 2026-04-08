@@ -1,29 +1,27 @@
+import { AdminReplyDto } from '@components/chatbot/dtos/admin-reply.dto';
+import { AdminSetReplyModeDto } from '@components/chatbot/dtos/admin-set-reply-mode.dto';
 import { ChatPromptDto } from '@components/chatbot/dtos/chat-prompt.dto';
-import { ChatStreamQueryDto } from '@components/chatbot/dtos/chat-stream-query.dto';
 import { QueryAdminChatConversationsDto } from '@components/chatbot/dtos/query-admin-chat-conversations.dto';
-import {
-  ChatbotConversationService,
-  PromptChatResult
-} from '@components/chatbot/services/chatbot-conversation.service';
+import { PromptChatResult } from '@components/chatbot/interfaces/chatbot-conversation.interface';
+import { ChatbotConversationService } from '@components/chatbot/services/chatbot-conversation.service';
 import {
   CurrentUser,
   CurrentUserDto,
   Public,
   Roles
 } from '@core/utilities/decorators';
-import { SkipTransformResponse } from '@core/utilities/interceptors';
 import {
   Body,
   Controller,
   Get,
-  MessageEvent,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
-  Query,
-  Sse
+  Query
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { Observable } from 'rxjs';
 
 @ApiTags('Chatbot')
 @Controller({ path: 'chatbot', version: '1' })
@@ -47,22 +45,6 @@ export class ChatbotController {
     });
   }
 
-  @Sse('stream')
-  @Public()
-  @SkipTransformResponse()
-  @ApiOperation({
-    summary: 'SSE chat stream'
-  })
-  stream(
-    @Query() query: ChatStreamQueryDto,
-    @CurrentUser() user?: CurrentUserDto
-  ): Observable<MessageEvent> {
-    return this.chatbotConversationService.streamChat({
-      ...query,
-      userId: user?.userId
-    });
-  }
-
   @Get('admin/conversations')
   @Roles(Role.ADMIN)
   @ApiOperation({
@@ -70,5 +52,34 @@ export class ChatbotController {
   })
   findAllForAdmin(@Query() query: QueryAdminChatConversationsDto) {
     return this.chatbotConversationService.findConversationsForAdmin(query);
+  }
+
+  @Patch('admin/conversations/:conversationId/reply-mode')
+  @Roles(Role.ADMIN)
+  setReplyMode(
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+    @Body() body: AdminSetReplyModeDto,
+    @CurrentUser() user: CurrentUserDto
+  ) {
+    return this.chatbotConversationService.setConversationReplyMode({
+      conversationId,
+      mode: body.mode,
+      adminUserId: user.userId
+    });
+  }
+
+  @Post('admin/conversations/:conversationId/reply')
+  @Roles(Role.ADMIN)
+  sendAdminReply(
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+    @Body() body: AdminReplyDto,
+    @CurrentUser() user: CurrentUserDto
+  ) {
+    return this.chatbotConversationService.sendAdminReply({
+      conversationId,
+      message: body.message,
+      traceId: body.traceId,
+      adminUserId: user.userId
+    });
   }
 }

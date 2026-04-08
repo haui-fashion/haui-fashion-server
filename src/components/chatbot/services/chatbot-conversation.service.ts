@@ -1,4 +1,20 @@
+import {
+  CHATBOT_REPLY_MODE,
+  ChatbotReplyMode
+} from '@components/chatbot/constants/chatbot-reply-mode.constants';
 import { QueryAdminChatConversationsDto } from '@components/chatbot/dtos/query-admin-chat-conversations.dto';
+import {
+  AdminChatConversationItem,
+  AdminReplyResult,
+  ChatMessageSenderType,
+  ConversationMetadata,
+  HumanAdminReplyEventPayload,
+  HumanUserMessageEventPayload,
+  ProductCardPayload,
+  PromptChatResult,
+  SetConversationReplyModeResult,
+  StreamChatInput
+} from '@components/chatbot/interfaces/chatbot-conversation.interface';
 import {
   ChatHistoryTurn,
   ToolInvocationLog
@@ -14,57 +30,10 @@ import {
   Logger,
   MessageEvent
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ChatMessage, ChatMessageRole, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { Observable } from 'rxjs';
-
-interface StreamChatInput {
-  message: string;
-  conversationId?: string;
-  sessionId?: string;
-  traceId?: string;
-  userId?: string;
-}
-
-interface ProductCardPayload {
-  id?: string;
-  name?: string;
-  slug?: string;
-  brand?: string | null;
-  price?: string;
-  imageUrl?: string;
-}
-
-export interface PromptChatResult {
-  conversationId: string;
-  sessionId: string;
-  intent: string;
-  hasProducts: boolean;
-  answer: string;
-  products: ProductCardPayload[];
-}
-
-export interface AdminChatMessageItem {
-  id: string;
-  role: ChatMessageRole;
-  content: string;
-  intent: string | null;
-  products?: ProductCardPayload[];
-  createdAt: Date;
-}
-
-export interface AdminChatConversationItem {
-  id: string;
-  sessionId: string;
-  createdAt: Date;
-  updatedAt: Date;
-  user: {
-    id: string;
-    fullname: string;
-    email: string;
-  } | null;
-  messages: AdminChatMessageItem[];
-}
 
 @Injectable()
 export class ChatbotConversationService {
@@ -77,7 +46,8 @@ export class ChatbotConversationService {
     private readonly prisma: PrismaService,
     private readonly appCacheService: AppCacheService,
     private readonly ollamaIntentRouterService: OllamaIntentRouterService,
-    private readonly chatbotToolCallLoopService: ChatbotToolCallLoopService
+    private readonly chatbotToolCallLoopService: ChatbotToolCallLoopService,
+    private readonly eventEmitter: EventEmitter2
   ) {}
 
   streamChat(input: StreamChatInput): Observable<MessageEvent> {
@@ -146,7 +116,11 @@ export class ChatbotConversationService {
                 mode: 'insensitive'
               },
               role: {
-                in: [ChatMessageRole.USER, ChatMessageRole.ASSISTANT]
+                in: [
+                  ChatMessageRole.USER,
+                  ChatMessageRole.ASSISTANT,
+                  ChatMessageRole.SYSTEM
+                ]
               }
             }
           }
@@ -173,7 +147,11 @@ export class ChatbotConversationService {
           messages: {
             where: {
               role: {
-                in: [ChatMessageRole.USER, ChatMessageRole.ASSISTANT]
+                in: [
+                  ChatMessageRole.USER,
+                  ChatMessageRole.ASSISTANT,
+                  ChatMessageRole.SYSTEM
+                ]
               }
             },
             orderBy: {
@@ -192,6 +170,7 @@ export class ChatbotConversationService {
         sessionId: row.sessionKey,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
+        replyMode: this.resolveReplyMode(row.metadata),
         user: row.user
           ? {
               id: row.user.id,
@@ -205,6 +184,7 @@ export class ChatbotConversationService {
           .map((message) => ({
             id: message.id,
             role: message.role,
+            senderType: this.resolveSenderType(message),
             content: message.content,
             intent: message.intent,
             products: this.parseProductPayload(message.productPayload),
@@ -234,7 +214,9 @@ export class ChatbotConversationService {
       data: {
         conversationId: result.conversationId,
         sessionId: result.sessionId,
-        intent: result.intent
+        intent: result.intent,
+        replyMode: result.replyMode,
+        waitingForAdmin: result.waitingForAdmin === true
       }
     });
 
@@ -266,7 +248,9 @@ export class ChatbotConversationService {
         sessionId: result.sessionId,
         intent: result.intent,
         hasProducts: result.hasProducts,
-        answer: result.answer
+        answer: result.answer,
+        replyMode: result.replyMode,
+        waitingForAdmin: result.waitingForAdmin === true
       }
     });
 
@@ -282,11 +266,9 @@ export class ChatbotConversationService {
     }
 
     const conversation = await this.resolveConversation(input);
-    const history: ChatHistoryTurn[] = await this.getConversationHistory(
-      conversation.id
-    );
+    const replyMode = this.resolveReplyMode(conversation.metadata);
 
-    await this.persistMessage({
+    const userMessage = await this.persistMessage({
       conversationId: conversation.id,
       role: ChatMessageRole.USER,
       content: normalizedMessage,
@@ -294,6 +276,45 @@ export class ChatbotConversationService {
         traceId: input.traceId || null
       }
     });
+
+    if (replyMode === CHATBOT_REPLY_MODE.HUMAN) {
+      await this.prisma.chatConversation.update({
+        where: { id: conversation.id },
+        data: {
+          updatedAt: new Date()
+        }
+      });
+
+      await this.refreshConversationCache(conversation.id);
+
+      this.eventEmitter.emit('chatbot.human.user_message', {
+        conversationId: conversation.id,
+        sessionId: conversation.sessionKey,
+        replyMode,
+        message: {
+          id: userMessage.id,
+          role: 'USER',
+          content: userMessage.content,
+          createdAt: userMessage.createdAt
+        }
+      } satisfies HumanUserMessageEventPayload);
+
+      return {
+        conversationId: conversation.id,
+        sessionId: conversation.sessionKey,
+        intent: 'HUMAN_HANDOFF',
+        hasProducts: false,
+        answer:
+          'Tin nhắn của bạn đã được chuyển cho tư vấn viên. Vui lòng chờ trong giây lát.',
+        products: [],
+        replyMode,
+        waitingForAdmin: true
+      };
+    }
+
+    const history: ChatHistoryTurn[] = await this.getConversationHistory(
+      conversation.id
+    );
 
     const intent = await this.ollamaIntentRouterService.routeIntent(
       `History: ${history
@@ -350,7 +371,125 @@ export class ChatbotConversationService {
       intent: intent.intent,
       hasProducts: productCards.length > 0,
       answer: assistantResult.answer,
-      products: productCards
+      products: productCards,
+      replyMode: CHATBOT_REPLY_MODE.AI,
+      waitingForAdmin: false
+    };
+  }
+
+  async setConversationReplyMode(params: {
+    conversationId: string;
+    mode: ChatbotReplyMode;
+    adminUserId: string;
+  }): Promise<SetConversationReplyModeResult> {
+    const conversation = await this.prisma.chatConversation.findUnique({
+      where: { id: params.conversationId }
+    });
+
+    if (!conversation) {
+      throw new BadRequestException('conversationId is invalid');
+    }
+
+    const currentMetadata = this.parseConversationMetadata(
+      conversation.metadata
+    );
+
+    await this.prisma.chatConversation.update({
+      where: { id: params.conversationId },
+      data: {
+        metadata: {
+          ...currentMetadata,
+          replyMode: params.mode,
+          modeUpdatedAt: new Date().toISOString(),
+          modeUpdatedBy: params.adminUserId
+        } as unknown as Prisma.InputJsonValue,
+        updatedAt: new Date()
+      }
+    });
+
+    this.eventEmitter.emit('chatbot.mode.changed', {
+      conversationId: params.conversationId,
+      replyMode: params.mode
+    });
+
+    return {
+      conversationId: params.conversationId,
+      replyMode: params.mode
+    };
+  }
+
+  async sendAdminReply(params: {
+    conversationId: string;
+    message: string;
+    traceId?: string;
+    adminUserId: string;
+  }): Promise<AdminReplyResult> {
+    const normalizedMessage = params.message.trim();
+    if (!normalizedMessage) {
+      throw new BadRequestException('message is required');
+    }
+
+    const conversation = await this.prisma.chatConversation.findUnique({
+      where: { id: params.conversationId }
+    });
+
+    if (!conversation) {
+      throw new BadRequestException('conversationId is invalid');
+    }
+
+    const replyMode = this.resolveReplyMode(conversation.metadata);
+    if (replyMode !== CHATBOT_REPLY_MODE.HUMAN) {
+      throw new BadRequestException(
+        'Conversation is not in HUMAN mode for admin replies'
+      );
+    }
+
+    const adminMessage = await this.persistMessage({
+      conversationId: params.conversationId,
+      role: ChatMessageRole.SYSTEM,
+      content: normalizedMessage,
+      metadata: {
+        traceId: params.traceId || null,
+        senderType: 'ADMIN',
+        adminUserId: params.adminUserId
+      }
+    });
+
+    await this.prisma.chatConversation.update({
+      where: { id: params.conversationId },
+      data: {
+        updatedAt: new Date()
+      }
+    });
+
+    await this.refreshConversationCache(params.conversationId);
+
+    this.eventEmitter.emit('chatbot.human.admin_reply', {
+      conversationId: params.conversationId,
+      sessionId: conversation.sessionKey,
+      replyMode,
+      message: {
+        id: adminMessage.id,
+        role: 'SYSTEM',
+        senderType: 'ADMIN',
+        content: adminMessage.content,
+        createdAt: adminMessage.createdAt
+      }
+    } satisfies HumanAdminReplyEventPayload);
+
+    return {
+      conversationId: params.conversationId,
+      sessionId: conversation.sessionKey,
+      replyMode,
+      message: {
+        id: adminMessage.id,
+        role: adminMessage.role,
+        senderType: 'ADMIN',
+        content: adminMessage.content,
+        intent: adminMessage.intent,
+        products: this.parseProductPayload(adminMessage.productPayload),
+        createdAt: adminMessage.createdAt
+      }
     };
   }
 
@@ -422,7 +561,11 @@ export class ChatbotConversationService {
       where: {
         conversationId,
         role: {
-          in: [ChatMessageRole.USER, ChatMessageRole.ASSISTANT]
+          in: [
+            ChatMessageRole.USER,
+            ChatMessageRole.ASSISTANT,
+            ChatMessageRole.SYSTEM
+          ]
         }
       },
       orderBy: {
@@ -464,7 +607,52 @@ export class ChatbotConversationService {
       };
     }
 
+    if (
+      message.role === ChatMessageRole.SYSTEM &&
+      this.resolveSenderType(message) === 'ADMIN'
+    ) {
+      return {
+        role: 'assistant',
+        content: message.content
+      };
+    }
+
     return null;
+  }
+
+  private resolveReplyMode(
+    metadata: Prisma.JsonValue | null
+  ): ChatbotReplyMode {
+    const parsedMetadata = this.parseConversationMetadata(metadata);
+    return parsedMetadata.replyMode === CHATBOT_REPLY_MODE.HUMAN
+      ? CHATBOT_REPLY_MODE.HUMAN
+      : CHATBOT_REPLY_MODE.AI;
+  }
+
+  private parseConversationMetadata(
+    metadata: Prisma.JsonValue | null
+  ): ConversationMetadata {
+    const parsed = this.asRecord(metadata);
+    if (!parsed) {
+      return {};
+    }
+
+    return parsed as ConversationMetadata;
+  }
+
+  private resolveSenderType(
+    message: Pick<ChatMessage, 'role' | 'metadata'>
+  ): ChatMessageSenderType | undefined {
+    if (message.role === ChatMessageRole.ASSISTANT) {
+      return 'AI';
+    }
+
+    if (message.role !== ChatMessageRole.SYSTEM) {
+      return undefined;
+    }
+
+    const metadata = this.asRecord(message.metadata);
+    return metadata?.senderType === 'ADMIN' ? 'ADMIN' : undefined;
   }
 
   private getMemoryCacheKey(conversationId: string): string {

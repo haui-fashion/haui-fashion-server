@@ -62,6 +62,7 @@ type VariantSummary = {
   minVariantPrice: number | null;
   maxVariantPrice: number | null;
   totalVariantStock: number;
+  hexColors?: string[];
 };
 
 const MAX_VECTOR_SEARCH_CANDIDATES = 3000;
@@ -227,7 +228,17 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
     }
 
     if (filter && filter.length > 0) {
-      const filterWhere = buildPrismaWhereFromFilters(filter);
+      const remappedFilter = filter.map((f) => {
+        if (f.column === 'price') {
+          return {
+            ...f,
+            column: 'variants.some.price'
+          };
+        }
+        return f;
+      });
+
+      const filterWhere = buildPrismaWhereFromFilters(remappedFilter);
       const existingAnd = Array.isArray(where.AND)
         ? where.AND
         : where.AND
@@ -404,7 +415,7 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
 
     const ranked = new Map<string, RankedProductItem>();
 
-    for (const [id, score] of semanticScoreById.entries()) {
+    for (const [id, score] of Array.from(semanticScoreById.entries())) {
       ranked.set(id, {
         id,
         score:
@@ -413,7 +424,7 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
       });
     }
 
-    for (const [id, score] of lexicalScoreById.entries()) {
+    for (const [id, score] of Array.from(lexicalScoreById.entries())) {
       if (ranked.has(id)) {
         continue;
       }
@@ -583,8 +594,29 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
           row._min.price !== null ? Number(row._min.price) : null,
         maxVariantPrice:
           row._max.price !== null ? Number(row._max.price) : null,
-        totalVariantStock: row._sum.stock ?? 0
+        totalVariantStock: row._sum.stock ?? 0,
+        hexColors: []
       });
+    }
+
+    const variantsColors = await this.prisma.variant.findMany({
+      where: { productId: { in: productIds } },
+      select: {
+        productId: true,
+        colorOptionValue: { select: { hexColor: true } }
+      }
+    });
+
+    for (const v of variantsColors) {
+      if (v.colorOptionValue?.hexColor) {
+        const summary = result.get(v.productId);
+        if (summary) {
+          if (!summary.hexColors) summary.hexColors = [];
+          if (!summary.hexColors.includes(v.colorOptionValue.hexColor)) {
+            summary.hexColors.push(v.colorOptionValue.hexColor);
+          }
+        }
+      }
     }
 
     return result;
@@ -732,5 +764,141 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
       ORDER BY score DESC, p.updated_at DESC
       LIMIT ${safeLimit};
     `;
+  }
+
+  async findBestSellers(
+    limit: number
+  ): Promise<PaginatedData<ProductListItem>> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const topVariants = await this.prisma.orderItem.groupBy({
+      by: ['variantId'],
+      where: {
+        order: {
+          status: {
+            notIn: ['CANCELED']
+          },
+          createdAt: {
+            gte: sevenDaysAgo
+          }
+        }
+      },
+      _sum: {
+        quantity: true
+      },
+      orderBy: {
+        _sum: {
+          quantity: 'desc'
+        }
+      },
+      take: limit * 3
+    });
+
+    const variantIds = topVariants.map((v) => v.variantId);
+    if (variantIds.length === 0) {
+      return {
+        items: [],
+        meta: { total: 0, page: 1, limit, totalPages: 0 }
+      };
+    }
+
+    const variants = await this.prisma.variant.findMany({
+      where: { id: { in: variantIds } },
+      select: { id: true, productId: true }
+    });
+
+    const productIdsSet = new Set<string>();
+    for (const vId of variantIds) {
+      const v = variants.find((variant) => variant.id === vId);
+      if (v) {
+        productIdsSet.add(v.productId);
+      }
+    }
+    const productIds = Array.from(productIdsSet).slice(0, limit);
+
+    if (productIds.length === 0) {
+      return {
+        items: [],
+        meta: { total: 0, page: 1, limit, totalPages: 0 }
+      };
+    }
+
+    const data = await this.prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        isActive: true
+      },
+      select: productListSelect
+    });
+
+    const itemsWithVariantSummary = await this.attachVariantSummary(data);
+    const itemsById = new Map(
+      itemsWithVariantSummary.map((item) => [item.id, item])
+    );
+    const orderedItems = productIds
+      .map((id) => itemsById.get(id))
+      .filter((item): item is ProductListItem => Boolean(item));
+
+    return {
+      items: orderedItems,
+      meta: {
+        total: orderedItems.length,
+        page: 1,
+        limit,
+        totalPages: 1
+      }
+    };
+  }
+
+  async findRecommendations(
+    productId: string,
+    categoryId: string | null,
+    limit: number
+  ): Promise<PaginatedData<ProductListItem>> {
+    const where: Prisma.ProductWhereInput = {
+      id: { not: productId },
+      isActive: true,
+      ...(categoryId && { categoryId })
+    };
+
+    let data = await this.prisma.product.findMany({
+      where,
+      select: productListSelect,
+      take: limit * 2
+    });
+
+    if (data.length < limit) {
+      const fallbackWhere: Prisma.ProductWhereInput = {
+        id: { not: productId },
+        isActive: true
+      };
+
+      const excludeIds = data.map((d) => d.id);
+      if (excludeIds.length > 0) {
+        fallbackWhere.id = { notIn: [productId, ...excludeIds] };
+      }
+
+      const fallbackData = await this.prisma.product.findMany({
+        where: fallbackWhere,
+        select: productListSelect,
+        take: limit - data.length
+      });
+      data = [...data, ...fallbackData];
+    }
+
+    const shuffled = data.sort(() => 0.5 - Math.random()).slice(0, limit);
+
+    const items = await this.attachVariantSummary(shuffled);
+
+    return {
+      items,
+      meta: {
+        total: items.length,
+        page: 1,
+        limit,
+        totalPages: 1
+      }
+    };
   }
 }

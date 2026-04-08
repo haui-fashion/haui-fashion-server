@@ -133,11 +133,30 @@ export class ProductController {
     return this.productService.findAll(query);
   }
 
+  @Get('best-sellers')
+  @Public()
+  @ApiOperation({ summary: 'Public list best selling products' })
+  findBestSellers(@Query('limit') limitStr?: string) {
+    const limit = limitStr ? parseInt(limitStr, 10) : 8;
+    return this.productService.findBestSellers(limit);
+  }
+
   @Get('slug/:slug')
   @Public()
   @ApiOperation({ summary: 'Public get product by slug (active only)' })
   findBySlug(@Param('slug') slug: string) {
     return this.productService.findBySlug(slug);
+  }
+
+  @Get(':id/recommendations')
+  @Public()
+  @ApiOperation({ summary: 'Public list recommended products' })
+  findRecommendations(
+    @Param('id') id: string,
+    @Query('limit') limitStr?: string
+  ) {
+    const limit = limitStr ? parseInt(limitStr, 10) : 8;
+    return this.productService.findRecommendations(id, limit);
   }
 
   @Get('autocomplete')
