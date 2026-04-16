@@ -50,7 +50,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         email: user.email,
         role: user.role
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
       throw new UnauthorizedException('Không được phép truy cập');
     }
   }

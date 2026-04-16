@@ -8,11 +8,13 @@ import {
   SubscribePayload
 } from '@components/chatbot/interfaces/chatbot-gateway.interface';
 import { ChatbotConversationService } from '@components/chatbot/services/chatbot-conversation.service';
+import { AppJwtService } from '@core/modules/app-jwt/services/app-jwt.service';
 import { Logger, MessageEvent } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayConnection,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer
@@ -30,15 +32,34 @@ import { Server, Socket } from 'socket.io';
     credentials: true
   }
 })
-export class ChatbotGateway {
+export class ChatbotGateway implements OnGatewayConnection {
   private readonly logger = new Logger(ChatbotGateway.name);
 
   @WebSocketServer()
   server: Server;
 
   constructor(
-    private readonly chatbotConversationService: ChatbotConversationService
+    private readonly chatbotConversationService: ChatbotConversationService,
+    private readonly appJwtService: AppJwtService
   ) {}
+
+  handleConnection(client: Socket) {
+    const token =
+      client.handshake.auth?.token ||
+      client.handshake.headers?.authorization?.split(' ')[1];
+
+    if (token) {
+      try {
+        const payload = this.appJwtService.verifyToken(token);
+        client.data.userId = payload.sub;
+        this.logger.log(`Client authenticated: ${payload.sub}`);
+      } catch (error) {
+        this.logger.warn(
+          `Auth failed for client ${client.id}: ${error.message}`
+        );
+      }
+    }
+  }
 
   @SubscribeMessage('chatbot.subscribe')
   async handleSubscribe(
@@ -89,7 +110,8 @@ export class ChatbotGateway {
         message: normalizedMessage,
         conversationId: payload.conversationId,
         sessionId: payload.sessionId,
-        traceId: payload.traceId
+        traceId: payload.traceId,
+        userId: client.data.userId
       });
 
       stream$.subscribe({
@@ -117,17 +139,16 @@ export class ChatbotGateway {
           }
         },
         error: (error: unknown) => {
-          const resolvedMessage =
-            error instanceof Error
-              ? error.message
-              : 'Không thể gửi tin nhắn ở thời điểm hiện tại.';
+          this.logger.warn(
+            `Stream failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          );
 
           client.emit('chatbot.stream', {
             requestId,
             type: 'error',
             data: {
               code: 'SOCKET_STREAM_FAILED',
-              message: resolvedMessage
+              message: 'Hệ thống xảy ra lỗi. Vui lòng thử lại sau.'
             }
           } satisfies ChatbotSocketStreamEvent);
         }
@@ -139,17 +160,15 @@ export class ChatbotGateway {
       };
     } catch (error) {
       const resolvedMessage =
-        error instanceof Error
-          ? error.message
-          : 'Không thể gửi tin nhắn ở thời điểm hiện tại.';
+        error instanceof Error ? error.message : 'Unknown error';
 
-      this.logger.warn(`Failed: ${resolvedMessage}`);
+      this.logger.warn(`Failed to send message: ${resolvedMessage}`);
 
       return {
         ok: false,
         requestId,
         code: 'SOCKET_MESSAGE_FAILED',
-        message: resolvedMessage
+        message: 'Hệ thống xảy ra lỗi. Vui lòng thử lại sau.'
       };
     }
   }

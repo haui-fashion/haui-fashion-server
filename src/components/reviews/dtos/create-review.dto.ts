@@ -1,37 +1,15 @@
-import { FileDto } from '@common/dtos/file.dto';
 import { Label } from '@core/utilities/decorators/label.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsInt,
   IsNotEmpty,
-  IsObject,
   IsOptional,
   IsString,
   IsUUID,
   Max,
-  Min,
-  ValidateIf,
-  ValidateNested
+  Min
 } from 'class-validator';
-
-export class ReviewImageInputDto {
-  @ApiPropertyOptional()
-  @Label('ID tệp đã tải lên')
-  @IsOptional()
-  @ValidateIf((o: ReviewImageInputDto) => !o.file)
-  @IsUUID()
-  fileId?: string;
-
-  @ApiPropertyOptional({ type: () => FileDto })
-  @Label('Thông tin tệp')
-  @IsOptional()
-  @ValidateIf((o: ReviewImageInputDto) => !o.fileId)
-  @IsObject()
-  @ValidateNested()
-  @Type(() => FileDto)
-  file?: FileDto;
-}
 
 export class CreateReviewDto {
   @ApiProperty()
@@ -53,15 +31,4 @@ export class CreateReviewDto {
   @IsOptional()
   @IsString()
   content?: string;
-
-  @ApiPropertyOptional({
-    type: () => ReviewImageInputDto,
-    description: 'Hỗ trợ cả fileId và file dto (id/url/fileName).'
-  })
-  @Label('Ảnh đánh giá')
-  @IsOptional()
-  @IsObject()
-  @ValidateNested()
-  @Type(() => ReviewImageInputDto)
-  image?: ReviewImageInputDto;
 }

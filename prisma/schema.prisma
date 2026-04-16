@@ -108,7 +108,6 @@ model File {
   createdAt DateTime @default(now()) @map("created_at")
 
   productImages ProductImage[]
-  reviews       Review[]
 
   @@index([userId])
   @@map("files")
@@ -242,16 +241,12 @@ model Review {
   star    Int
   content String? @db.Text
 
-  imageId String? @map("image_id")
-  image   File?   @relation(fields: [imageId], references: [id], onDelete: SetNull)
-
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, productId])
   @@index([userId])
   @@index([productId])
-  @@index([imageId])
   @@map("reviews")
 }
 

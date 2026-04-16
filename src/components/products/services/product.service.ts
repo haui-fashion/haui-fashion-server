@@ -869,6 +869,27 @@ export class ProductService {
 
   private toProductListResponse(product: any) {
     const firstImage = product.images?.[0] ?? null;
+    const variantFirstImages = Array.isArray(product.variants)
+      ? product.variants
+          .map((variant: any) => variant?.colorOptionValue?.images?.[0] ?? null)
+          .filter((image: any) => Boolean(image))
+      : [];
+
+    const dedupImages = new Map<string, any>();
+
+    variantFirstImages.forEach((image: any) => {
+      if (image?.id) {
+        dedupImages.set(image.id, image);
+      }
+    });
+
+    const images = Array.from(dedupImages.values());
+
+    if (images.length === 0 && firstImage) {
+      images.push(firstImage);
+    }
+
+    const image = images[0] ?? null;
 
     return {
       id: product.id,
@@ -882,7 +903,8 @@ export class ProductService {
       isActive: product.isActive,
       categoryId: product.categoryId,
       category: product.category,
-      image: firstImage,
+      image,
+      images,
       numberOfVariants: product.numberOfVariants ?? 0,
       minVariantPrice: product.minVariantPrice ?? null,
       maxVariantPrice: product.maxVariantPrice ?? null,

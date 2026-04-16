@@ -1,16 +1,7 @@
-import { ReviewImageInputDto } from '@components/reviews/dtos/create-review.dto';
 import { Label } from '@core/utilities/decorators/label.decorator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsInt,
-  IsObject,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-  ValidateNested
-} from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UpdateReviewDto {
   @ApiPropertyOptional({ minimum: 1, maximum: 5 })
@@ -27,15 +18,4 @@ export class UpdateReviewDto {
   @IsOptional()
   @IsString()
   content?: string;
-
-  @ApiPropertyOptional({
-    type: () => ReviewImageInputDto,
-    description: 'Hỗ trợ cả fileId và file dto (id/url/fileName).'
-  })
-  @Label('Ảnh đánh giá')
-  @IsOptional()
-  @IsObject()
-  @ValidateNested()
-  @Type(() => ReviewImageInputDto)
-  image?: ReviewImageInputDto;
 }

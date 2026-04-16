@@ -28,7 +28,33 @@ export class EntityCodeService {
       throw new Error('Code length must be a positive integer');
     }
 
-    const nextSequence = await this.getNextSequenceValue(sequenceKey);
+    const nextSequence = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtext($1))`,
+        sequenceKey
+      );
+
+      const sequence = await tx.entitySequence.upsert({
+        where: {
+          key: sequenceKey
+        },
+        create: {
+          key: sequenceKey,
+          currentValue: 1
+        },
+        update: {
+          currentValue: {
+            increment: 1
+          }
+        },
+        select: {
+          currentValue: true
+        }
+      });
+
+      return sequence.currentValue;
+    });
+
     const maxSequence = 10 ** length - 1;
 
     if (nextSequence > maxSequence) {
@@ -38,27 +64,5 @@ export class EntityCodeService {
     }
 
     return `${prefix}-${String(nextSequence).padStart(length, '0')}`;
-  }
-
-  private async getNextSequenceValue(sequenceKey: string): Promise<number> {
-    const sequence = await this.prisma.entitySequence.upsert({
-      where: {
-        key: sequenceKey
-      },
-      create: {
-        key: sequenceKey,
-        currentValue: 1
-      },
-      update: {
-        currentValue: {
-          increment: 1
-        }
-      },
-      select: {
-        currentValue: true
-      }
-    });
-
-    return sequence.currentValue;
   }
 }

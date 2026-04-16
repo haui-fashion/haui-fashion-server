@@ -20,18 +20,10 @@ export class ReviewEntity extends BaseEntity {
   content?: string;
 
   @Expose()
-  @ApiProperty({ required: false })
-  imageId?: string;
-
-  @Expose()
   @ApiProperty({ required: false, type: Object })
   user?: Record<string, unknown>;
 
   @Expose()
   @ApiProperty({ required: false, type: Object })
   product?: Record<string, unknown>;
-
-  @Expose()
-  @ApiProperty({ required: false, type: Object })
-  image?: Record<string, unknown>;
 }

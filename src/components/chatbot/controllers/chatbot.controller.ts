@@ -45,6 +45,27 @@ export class ChatbotController {
     });
   }
 
+  @Get('messages')
+  @Public()
+  @ApiOperation({
+    summary: 'Get conversation messages (historical)'
+  })
+  getMessages(
+    @Query('sessionId') sessionId?: string,
+    @Query('conversationId') conversationId?: string,
+    @Query('limit') limit?: number,
+    @Query('before') before?: string,
+    @CurrentUser() user?: CurrentUserDto
+  ) {
+    return this.chatbotConversationService.getConversationMessages({
+      sessionId,
+      conversationId,
+      userId: user?.userId,
+      limit: limit ? parseInt(limit.toString(), 10) : 10,
+      before: before ? new Date(before) : undefined
+    });
+  }
+
   @Get('admin/conversations')
   @Roles(Role.ADMIN)
   @ApiOperation({

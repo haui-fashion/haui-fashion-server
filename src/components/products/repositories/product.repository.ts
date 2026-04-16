@@ -141,6 +141,47 @@ const productListSelect = Prisma.validator<Prisma.ProductSelect>()({
         }
       }
     }
+  },
+  variants: {
+    orderBy: {
+      createdAt: 'desc'
+    },
+    select: {
+      colorOptionValue: {
+        select: {
+          images: {
+            orderBy: [
+              {
+                isPrimary: 'desc'
+              },
+              {
+                position: 'asc'
+              },
+              {
+                createdAt: 'asc'
+              }
+            ],
+            take: 1,
+            select: {
+              id: true,
+              isPrimary: true,
+              position: true,
+              optionValueId: true,
+              file: {
+                select: {
+                  id: true,
+                  url: true,
+                  filename: true,
+                  publicId: true,
+                  mimetype: true,
+                  size: true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 });
 
@@ -553,7 +594,8 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
         numberOfVariants: summary?.numberOfVariants ?? 0,
         minVariantPrice: summary?.minVariantPrice ?? null,
         maxVariantPrice: summary?.maxVariantPrice ?? null,
-        totalVariantStock: summary?.totalVariantStock ?? 0
+        totalVariantStock: summary?.totalVariantStock ?? 0,
+        hexColors: summary?.hexColors ?? []
       };
     });
   }
@@ -796,49 +838,92 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
     });
 
     const variantIds = topVariants.map((v) => v.variantId);
-    if (variantIds.length === 0) {
-      return {
-        items: [],
-        meta: { total: 0, page: 1, limit, totalPages: 0 }
-      };
-    }
 
-    const variants = await this.prisma.variant.findMany({
-      where: { id: { in: variantIds } },
-      select: { id: true, productId: true }
-    });
+    let orderedItems: ProductListItem[] = [];
 
-    const productIdsSet = new Set<string>();
-    for (const vId of variantIds) {
-      const v = variants.find((variant) => variant.id === vId);
-      if (v) {
-        productIdsSet.add(v.productId);
+    if (variantIds.length > 0) {
+      const variants = await this.prisma.variant.findMany({
+        where: { id: { in: variantIds } },
+        select: { id: true, productId: true }
+      });
+
+      const productIdByVariantId = new Map(
+        variants.map((variant) => [variant.id, variant.productId])
+      );
+
+      const productIdsSet = new Set<string>();
+      for (const vId of variantIds) {
+        const productId = productIdByVariantId.get(vId);
+        if (productId) {
+          productIdsSet.add(productId);
+        }
+      }
+
+      const productIds = Array.from(productIdsSet).slice(0, limit);
+
+      if (productIds.length > 0) {
+        const data = await this.prisma.product.findMany({
+          where: {
+            id: { in: productIds },
+            isActive: true
+          },
+          select: productListSelect
+        });
+
+        const itemsWithVariantSummary = await this.attachVariantSummary(data);
+        const itemsById = new Map(
+          itemsWithVariantSummary.map((item) => [item.id, item])
+        );
+        orderedItems = productIds
+          .map((id) => itemsById.get(id))
+          .filter((item): item is ProductListItem => Boolean(item));
       }
     }
-    const productIds = Array.from(productIdsSet).slice(0, limit);
 
-    if (productIds.length === 0) {
-      return {
-        items: [],
-        meta: { total: 0, page: 1, limit, totalPages: 0 }
-      };
+    const fallbackTake = Math.max(limit - orderedItems.length, 0);
+
+    if (fallbackTake > 0) {
+      const excludeIds = orderedItems.map((item) => item.id);
+
+      const fallbackRows = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT p.id
+        FROM products p
+        WHERE p.is_active = TRUE
+        ${
+          excludeIds.length > 0
+            ? Prisma.sql`AND p.id NOT IN (${Prisma.join(excludeIds)})`
+            : Prisma.empty
+        }
+        ORDER BY RANDOM()
+        LIMIT ${fallbackTake};
+      `;
+
+      const fallbackIds = fallbackRows.map((row) => row.id);
+
+      if (fallbackIds.length > 0) {
+        const fallbackData = await this.prisma.product.findMany({
+          where: {
+            id: { in: fallbackIds },
+            isActive: true
+          },
+          select: productListSelect
+        });
+
+        const fallbackItemsWithVariantSummary =
+          await this.attachVariantSummary(fallbackData);
+        const fallbackItemsById = new Map(
+          fallbackItemsWithVariantSummary.map((item) => [item.id, item])
+        );
+        const orderedFallbackItems = fallbackIds
+          .map((id) => fallbackItemsById.get(id))
+          .filter((item): item is ProductListItem => Boolean(item));
+
+        orderedItems = [...orderedItems, ...orderedFallbackItems].slice(
+          0,
+          limit
+        );
+      }
     }
-
-    const data = await this.prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        isActive: true
-      },
-      select: productListSelect
-    });
-
-    const itemsWithVariantSummary = await this.attachVariantSummary(data);
-    const itemsById = new Map(
-      itemsWithVariantSummary.map((item) => [item.id, item])
-    );
-    const orderedItems = productIds
-      .map((id) => itemsById.get(id))
-      .filter((item): item is ProductListItem => Boolean(item));
 
     return {
       items: orderedItems,
@@ -846,7 +931,7 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
         total: orderedItems.length,
         page: 1,
         limit,
-        totalPages: 1
+        totalPages: orderedItems.length > 0 ? 1 : 0
       }
     };
   }

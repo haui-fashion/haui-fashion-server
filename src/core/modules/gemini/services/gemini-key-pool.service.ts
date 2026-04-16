@@ -42,7 +42,7 @@ export class GeminiKeyPoolService {
     const available: string[] = [];
 
     for (const key of candidates) {
-      if (!(await this.isBlocked(key))) {
+      if (!(await this.isBlocked(key)) && !(await this.isInUse(key))) {
         available.push(key);
       }
     }
@@ -56,6 +56,23 @@ export class GeminiKeyPoolService {
     );
 
     return Boolean(blocked);
+  }
+
+  async isInUse(key: string): Promise<boolean> {
+    const inUse = await this.appCacheService.get<boolean>(
+      AppCacheKeys.geminiInUseKey(this.getKeyFingerprint(key))
+    );
+
+    return Boolean(inUse);
+  }
+
+  async markInUse(key: string): Promise<void> {
+    const fingerprint = this.getKeyFingerprint(key);
+    await this.appCacheService.set(
+      AppCacheKeys.geminiInUseKey(fingerprint),
+      true,
+      AppCacheTtl.geminiInUseKey
+    );
   }
 
   async blockForRateLimit(key: string): Promise<void> {

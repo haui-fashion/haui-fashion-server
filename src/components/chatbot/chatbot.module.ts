@@ -11,10 +11,11 @@ import { GetListOrdersHandler } from '@components/chatbot/tools-handler/get-list
 import { GetPolicyHandler } from '@components/chatbot/tools-handler/get-policy.handler';
 import { GetProductDetailHandler } from '@components/chatbot/tools-handler/get-product-detail.handler';
 import { SearchProductsHandler } from '@components/chatbot/tools-handler/search-products.handler';
-import { EmbeddingService } from '@core/modules/embedding';
+import { AppJwtModule } from '@core/modules/app-jwt/app-jwt.module';
 import { Module } from '@nestjs/common';
 
 @Module({
+  imports: [AppJwtModule],
   controllers: [ChatbotController],
   providers: [
     ChatbotGateway,
@@ -28,8 +29,7 @@ import { Module } from '@nestjs/common';
     CheckOrderStatusHandler,
     GetListOrdersHandler,
     GetFaqHandler,
-    GetPolicyHandler,
-    EmbeddingService
+    GetPolicyHandler
   ],
   exports: [
     ChatbotToolCatalogService,

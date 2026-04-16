@@ -22,8 +22,7 @@ const reviewInclude = {
       slug: true,
       name: true
     }
-  },
-  image: true
+  }
 } as const;
 
 @Injectable()

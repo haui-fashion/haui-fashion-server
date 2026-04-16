@@ -14,8 +14,14 @@ export const AppCacheKeys = {
   passwordResetCooldown: (email: string) => {
     return `password_reset_cooldown:${email}`;
   },
+  blacklistedToken: (token: string) => {
+    return `auth:blacklisted_token:${token}`;
+  },
   geminiBlockedKey: (fingerprint: string) => {
     return `gemini:blocked:${fingerprint}`;
+  },
+  geminiInUseKey: (fingerprint: string) => {
+    return `gemini:in-use:${fingerprint}`;
   }
 };
 
@@ -25,5 +31,6 @@ export const AppCacheTtl = {
   emailVerificationCooldown: 60 * 1000,
   passwordReset: 15 * 60 * 1000,
   passwordResetCooldown: 5 * 60 * 1000,
-  geminiBlockedKey: 2 * 60 * 1000
+  geminiBlockedKey: 2 * 60 * 1000,
+  geminiInUseKey: 10 * 1000
 };

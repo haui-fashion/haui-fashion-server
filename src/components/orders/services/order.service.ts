@@ -1102,11 +1102,25 @@ export class OrderService {
     };
   }
 
+  private isExpiringOrders = false;
+
   @Cron('*/10 * * * *', {
     name: 'expire-pending-online-orders'
   })
   async expirePendingOnlineOrdersCron() {
-    await this.expirePendingOnlineOrders();
+    if (this.isExpiringOrders) {
+      this.logger.warn(
+        'expire-pending-online-orders cron skipped: previous run still in progress'
+      );
+      return;
+    }
+
+    this.isExpiringOrders = true;
+    try {
+      await this.expirePendingOnlineOrders();
+    } finally {
+      this.isExpiringOrders = false;
+    }
   }
 
   private resolvePaymentStatus(

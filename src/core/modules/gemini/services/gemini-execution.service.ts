@@ -12,6 +12,7 @@ type GeminiOperation<T> = (client: GoogleGenAI) => Promise<T>;
 @Injectable()
 export class GeminiExecutionService {
   private readonly logger = new Logger(GeminiExecutionService.name);
+  private readonly inUseRefreshIntervalMs = 5000;
 
   constructor(
     private readonly geminiKeyPoolService: GeminiKeyPoolService,
@@ -45,7 +46,7 @@ export class GeminiExecutionService {
       const key = regularKeys[index];
 
       try {
-        return await operation(this.geminiClientFactoryService.getClient(key));
+        return await this.executeWithKeyLease(key, operation);
       } catch (error) {
         if (!this.isRateLimitError(error)) {
           throw error;
@@ -105,7 +106,7 @@ export class GeminiExecutionService {
       const key = regularKeys[index];
 
       try {
-        return await operation(this.geminiClientFactoryService.getClient(key));
+        return await this.executeWithKeyLease(key, operation);
       } catch (error) {
         if (!this.isRateLimitError(error)) {
           throw error;
@@ -170,6 +171,23 @@ export class GeminiExecutionService {
     }
 
     return exhaustedError;
+  }
+
+  private async executeWithKeyLease<T>(
+    key: string,
+    operation: GeminiOperation<T>
+  ): Promise<T> {
+    await this.geminiKeyPoolService.markInUse(key);
+
+    const refreshTimer = setInterval(() => {
+      void this.geminiKeyPoolService.markInUse(key);
+    }, this.inUseRefreshIntervalMs);
+
+    try {
+      return await operation(this.geminiClientFactoryService.getClient(key));
+    } finally {
+      clearInterval(refreshTimer);
+    }
   }
 
   private isRateLimitError(error: unknown): boolean {

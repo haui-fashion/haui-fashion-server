@@ -58,7 +58,7 @@ export class ChatbotConversationService {
           type: 'error',
           data: {
             code: 'CHAT_STREAM_FAILED',
-            message: error.message
+            message: 'Hệ thống xảy ra lỗi. Vui lòng thử lại sau.'
           }
         });
         observer.complete();
@@ -222,7 +222,8 @@ export class ChatbotConversationService {
 
     const chunks = this.chunkAnswer(result.answer);
 
-    for (const [, chunk] of chunks.entries()) {
+    const chunksArray = [...chunks];
+    for (const chunk of chunksArray) {
       observer.next({
         type: 'delta',
         data: {
@@ -496,7 +497,7 @@ export class ChatbotConversationService {
   private async resolveConversation(
     input: StreamChatInput
   ): Promise<Prisma.ChatConversationGetPayload<{ include: { user: true } }>> {
-    const normalizedSessionId = input.sessionId?.trim() || randomUUID();
+    const normalizedSessionId = input.sessionId?.trim();
 
     if (input.conversationId) {
       const existing = await this.prisma.chatConversation.findUnique({
@@ -508,22 +509,105 @@ export class ChatbotConversationService {
         throw new BadRequestException('conversationId is invalid');
       }
 
-      if (input.sessionId && existing.sessionKey !== input.sessionId.trim()) {
+      if (normalizedSessionId && existing.sessionKey !== normalizedSessionId) {
         throw new BadRequestException('sessionId does not match conversation');
       }
 
       return existing;
     }
 
+    if (normalizedSessionId || input.userId) {
+      const existing = await this.prisma.chatConversation.findFirst({
+        where: {
+          OR: [
+            normalizedSessionId
+              ? { sessionKey: normalizedSessionId }
+              : undefined,
+            input.userId ? { userId: input.userId } : undefined
+          ].filter(Boolean) as Prisma.ChatConversationWhereInput[]
+        },
+        include: { user: true },
+        orderBy: { updatedAt: 'desc' }
+      });
+
+      if (existing) {
+        if (input.userId && !existing.userId) {
+          await this.prisma.chatConversation.update({
+            where: { id: existing.id },
+            data: { userId: input.userId }
+          });
+          existing.userId = input.userId;
+        }
+        return existing;
+      }
+    }
+
     return this.prisma.chatConversation.create({
       data: {
-        sessionKey: normalizedSessionId,
+        sessionKey: normalizedSessionId || randomUUID(),
         userId: input.userId || null
       },
       include: {
         user: true
       }
     });
+  }
+
+  async getConversationMessages(params: {
+    sessionId?: string;
+    conversationId?: string;
+    userId?: string;
+    limit?: number;
+    before?: Date;
+  }) {
+    const limit = params.limit || 10;
+    let conversationId = params.conversationId;
+
+    if (!conversationId && (params.sessionId || params.userId)) {
+      const conversation = await this.prisma.chatConversation.findFirst({
+        where: {
+          OR: [
+            params.sessionId ? { sessionKey: params.sessionId } : undefined,
+            params.userId ? { userId: params.userId } : undefined
+          ].filter(Boolean) as Prisma.ChatConversationWhereInput[]
+        },
+        orderBy: { updatedAt: 'desc' }
+      });
+      conversationId = conversation?.id;
+    }
+
+    if (!conversationId) {
+      return { messages: [], hasMore: false };
+    }
+
+    const messages = await this.prisma.chatMessage.findMany({
+      where: {
+        conversationId,
+        createdAt: params.before ? { lt: params.before } : undefined
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1
+    });
+
+    const hasMore = messages.length > limit;
+    const items = hasMore ? messages.slice(0, limit) : messages;
+
+    return {
+      messages: items.reverse().map((m) => this.mapToChatMessageResponse(m)),
+      hasMore,
+      conversationId
+    };
+  }
+
+  private mapToChatMessageResponse(message: any) {
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      createdAt: message.createdAt,
+      metadata: message.metadata,
+      products: this.parseProductPayload(message.productPayload)
+    };
   }
 
   private persistMessage(params: {

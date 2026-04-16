@@ -6,6 +6,5 @@ export class ReviewCreatedEventPayload {
   productId: string;
   star: number;
   content: string | null;
-  imageId: string | null;
   createdAt: Date;
 }

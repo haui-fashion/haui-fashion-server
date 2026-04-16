@@ -1,11 +1,20 @@
+import { AppCacheService } from '@core/modules/app-cache';
+import { AppCacheKeys } from '@core/modules/app-cache/constants/app-cache.constant';
 import { IS_PUBLIC_KEY } from '@core/utilities/decorators/public.decorator';
-import { ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(private reflector: Reflector) {
+  constructor(
+    private reflector: Reflector,
+    private readonly appCacheService: AppCacheService
+  ) {
     super();
   }
 
@@ -29,6 +38,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     if (!authHeader?.toLowerCase().startsWith('bearer ')) {
       return true;
+    }
+
+    const token = authHeader.slice(7);
+    const isBlacklisted = await this.appCacheService.get<boolean>(
+      AppCacheKeys.blacklistedToken(token)
+    );
+    if (isBlacklisted) {
+      throw new UnauthorizedException('Token đã bị thu hồi');
     }
 
     try {

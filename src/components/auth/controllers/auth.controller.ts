@@ -3,7 +3,15 @@ import {
   CurrentUserDto
 } from '@core/utilities/decorators/current-user.decorator';
 import { Public } from '@core/utilities/decorators/public.decorator';
-import { Body, Controller, Get, Post, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  Patch,
+  Query
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   ForgotPasswordDto,
@@ -38,6 +46,15 @@ export class AuthController {
   @Post('refresh')
   async refreshToken(@Body() dto: RefreshTokenDto) {
     return this.authService.refreshToken(dto);
+  }
+
+  @Post('logout')
+  @ApiBearerAuth()
+  async logout(
+    @CurrentUser() user: CurrentUserDto,
+    @Headers('authorization') authorization: string
+  ) {
+    return this.authService.logout(user.userId, authorization);
   }
 
   @Public()

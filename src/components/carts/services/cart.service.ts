@@ -41,94 +41,112 @@ export class CartService {
     const cart = await this.ensureCartByUserId(userId);
     const quantity = dto.quantity ?? 1;
 
-    const variant = await this.prisma.variant.findUnique({
-      where: {
-        id: dto.variantId
-      },
-      include: {
-        product: true
+    const result = await this.prisma.$transaction(async (tx) => {
+      const variant = await tx.variant.findUnique({
+        where: {
+          id: dto.variantId
+        },
+        include: {
+          product: true
+        }
+      });
+
+      if (!variant) {
+        throw new NotFoundException(
+          `Không tìm thấy biến thể với id ${dto.variantId}`
+        );
       }
-    });
 
-    if (!variant) {
-      throw new NotFoundException(
-        `Không tìm thấy biến thể với id ${dto.variantId}`
-      );
-    }
-
-    if (!variant.product.isActive) {
-      throw new ConflictException('Sản phẩm đã ngừng bán hoặc bị vô hiệu hóa');
-    }
-
-    if (variant.stock < quantity) {
-      throw new ConflictException(
-        'Số lượng thêm vào vượt quá tồn kho hiện tại'
-      );
-    }
-
-    const existingItem = await this.cartRepository.findItemByCartAndVariant(
-      cart.id,
-      dto.variantId
-    );
-
-    if (existingItem) {
-      const nextQuantity = existingItem.quantity + quantity;
-      if (nextQuantity > variant.stock) {
+      if (!variant.product.isActive) {
         throw new ConflictException(
-          'Số lượng trong giỏ vượt quá tồn kho hiện tại'
+          'Sản phẩm đã ngừng bán hoặc bị vô hiệu hóa'
         );
       }
 
-      await this.cartRepository.updateItemQuantity(
-        existingItem.id,
-        nextQuantity
-      );
-    } else {
-      try {
-        await this.cartRepository.createItem({
-          cart: {
-            connect: {
-              id: cart.id
-            }
-          },
-          variant: {
-            connect: {
-              id: dto.variantId
-            }
-          },
-          quantity
-        });
-      } catch (error) {
-        if (!this.isCartItemUniqueConflictError(error)) {
-          throw error;
-        }
-
-        const latestItem = await this.cartRepository.findItemByCartAndVariant(
-          cart.id,
-          dto.variantId
+      if (variant.stock < quantity) {
+        throw new ConflictException(
+          'Số lượng thêm vào vượt quá tồn kho hiện tại'
         );
+      }
 
-        if (!latestItem) {
-          throw new ConflictException(
-            'Không thể thêm sản phẩm vào giỏ hàng, vui lòng thử lại'
-          );
+      const existingItem = await tx.cartItem.findFirst({
+        where: {
+          cartId: cart.id,
+          variantId: dto.variantId
         }
+      });
 
-        const nextQuantity = latestItem.quantity + quantity;
+      if (existingItem) {
+        const nextQuantity = existingItem.quantity + quantity;
         if (nextQuantity > variant.stock) {
           throw new ConflictException(
             'Số lượng trong giỏ vượt quá tồn kho hiện tại'
           );
         }
 
-        await this.cartRepository.updateItemQuantity(
-          latestItem.id,
-          nextQuantity
-        );
+        await tx.cartItem.update({
+          where: { id: existingItem.id },
+          data: { quantity: nextQuantity }
+        });
+      } else {
+        await tx.cartItem.create({
+          data: {
+            cart: {
+              connect: {
+                id: cart.id
+              }
+            },
+            variant: {
+              connect: {
+                id: dto.variantId
+              }
+            },
+            quantity
+          }
+        });
       }
+
+      return tx.cart.findUnique({
+        where: { id: cart.id },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      images: {
+                        include: {
+                          file: true
+                        }
+                      }
+                    }
+                  },
+                  colorOptionValue: {
+                    include: {
+                      images: {
+                        include: {
+                          file: true
+                        }
+                      }
+                    }
+                  },
+                  sizeOptionValue: true
+                }
+              }
+            }
+          }
+        }
+      });
+    });
+
+    if (!result) {
+      throw new NotFoundException(
+        'Không tìm thấy giỏ hàng sau khi thêm sản phẩm'
+      );
     }
 
-    return this.getMyCart(userId);
+    return this.toCartSummary(result);
   }
 
   async syncCart(userId: string, dto: SyncCartDto) {
@@ -253,26 +271,5 @@ export class CartService {
         };
       })
     };
-  }
-
-  private isCartItemUniqueConflictError(error: unknown): boolean {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-      return false;
-    }
-
-    if (error.code !== 'P2002') {
-      return false;
-    }
-
-    const target = error.meta?.target;
-    if (Array.isArray(target)) {
-      const normalized = target.join('|').toLowerCase();
-      return normalized.includes('cart') && normalized.includes('variant');
-    }
-
-    return typeof target === 'string'
-      ? target.toLowerCase().includes('cart') &&
-          target.toLowerCase().includes('variant')
-      : false;
   }
 }

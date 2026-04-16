@@ -2,17 +2,13 @@ import {
   REVIEW_CREATED_EVENT,
   ReviewCreatedEventPayload
 } from '@components/reviews/constants/review.constant';
-import {
-  CreateReviewDto,
-  ReviewImageInputDto
-} from '@components/reviews/dtos/create-review.dto';
+import { CreateReviewDto } from '@components/reviews/dtos/create-review.dto';
 import { QueryReviewDto } from '@components/reviews/dtos/query-review.dto';
 import { UpdateReviewDto } from '@components/reviews/dtos/update-review.dto';
 import { ReviewRepository } from '@components/reviews/repositories/review.repository';
 import { PrismaService } from '@core/modules/prisma';
 import { CurrentUserDto } from '@core/utilities/decorators';
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -45,8 +41,6 @@ export class ReviewService {
   async create(user: CurrentUserDto, dto: CreateReviewDto) {
     await this.assertUserExists(user.userId);
     await this.assertProductExists(dto.productId);
-    const imageId = this.normalizeImageInput(dto.image);
-    await this.assertImageExists(imageId);
 
     const existing = await this.reviewRepository.findByUserAndProduct(
       user.userId,
@@ -71,14 +65,7 @@ export class ReviewService {
         connect: {
           id: dto.productId
         }
-      },
-      ...(imageId && {
-        image: {
-          connect: {
-            id: imageId
-          }
-        }
-      })
+      }
     };
 
     try {
@@ -90,7 +77,6 @@ export class ReviewService {
         productId: created.productId,
         star: created.star,
         content: created.content,
-        imageId: created.imageId,
         createdAt: created.createdAt
       };
 
@@ -111,19 +97,9 @@ export class ReviewService {
     const review = await this.findById(id);
     this.assertCanMutate(review.userId, user);
 
-    const imageId = this.normalizeImageInput(dto.image);
-    await this.assertImageExists(imageId);
-
     const data: Prisma.ReviewUpdateInput = {
       star: dto.star,
-      content: dto.content,
-      ...(imageId && {
-        image: {
-          connect: {
-            id: imageId
-          }
-        }
-      })
+      content: dto.content
     };
 
     return this.reviewRepository.updateReview(id, data);
@@ -170,35 +146,6 @@ export class ReviewService {
         `Không tìm thấy sản phẩm với id ${productId}`
       );
     }
-  }
-
-  private async assertImageExists(imageId?: string) {
-    if (!imageId) {
-      return;
-    }
-
-    const file = await this.prisma.file.findUnique({
-      where: { id: imageId },
-      select: { id: true }
-    });
-
-    if (!file) {
-      throw new NotFoundException(`Không tìm thấy file với id ${imageId}`);
-    }
-  }
-
-  private normalizeImageInput(image?: ReviewImageInputDto): string | undefined {
-    if (!image) {
-      return undefined;
-    }
-
-    const fileId = image.fileId || image.file?.id;
-
-    if (!fileId) {
-      throw new BadRequestException('Ảnh đánh giá phải có fileId hoặc file.id');
-    }
-
-    return fileId;
   }
 
   private isUniqueConstraintError(error: unknown, fields: string[]): boolean {

@@ -57,9 +57,13 @@ export class AppExceptionFilter implements ExceptionFilter {
       const { message, error, details } =
         this.extractHttpExceptionDetails(exceptionResponse);
 
+      // Override message for all 500 errors
+      const finalMessage =
+        status >= 500 ? 'Hệ thống xảy ra lỗi. Vui lòng thử lại sau.' : message;
+
       return {
         statusCode: status,
-        message,
+        message: finalMessage,
         error,
         timestamp,
         path,
@@ -72,7 +76,7 @@ export class AppExceptionFilter implements ExceptionFilter {
     if (exception instanceof Error) {
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Lỗi máy chủ nội bộ',
+        message: 'Hệ thống xảy ra lỗi. Vui lòng thử lại sau.',
         error: 'Internal Server Error',
         timestamp,
         path,
@@ -92,7 +96,7 @@ export class AppExceptionFilter implements ExceptionFilter {
     // Handle unknown exceptions
     return {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Đã xảy ra lỗi không mong muốn',
+      message: 'Hệ thống xảy ra lỗi. Vui lòng thử lại sau.',
       error: 'Internal Server Error',
       timestamp,
       path,

@@ -127,6 +127,13 @@ export class AuthService {
 
   async refreshToken(dto: RefreshTokenDto): Promise<TokenPair> {
     try {
+      const isBlacklisted = await this.appCacheService.get<boolean>(
+        AppCacheKeys.blacklistedToken(dto.refreshToken)
+      );
+      if (isBlacklisted) {
+        throw new UnauthorizedException('Refresh token đã bị thu hồi');
+      }
+
       const payload = this.appJwtService.verifyRefreshToken(dto.refreshToken);
 
       const user = await this.userService.findById(payload.sub);
@@ -144,11 +151,56 @@ export class AuthService {
         throw new UnauthorizedException('Tài khoản chưa được xác minh email');
       }
 
+      await this.blacklistToken(dto.refreshToken);
+
       return this.appJwtService.generateTokenPair({
-        sub: user.id
+        sub: user.id,
+        email: user.email,
+        role: user.role
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      this.logger.error(
+        'Refresh token error',
+        error instanceof Error ? error.stack : String(error)
+      );
       throw new UnauthorizedException('Refresh token không hợp lệ');
+    }
+  }
+
+  async logout(
+    userId: string,
+    authorization?: string
+  ): Promise<{ message: string }> {
+    const token = authorization?.startsWith('Bearer ')
+      ? authorization.slice(7)
+      : null;
+
+    if (token) {
+      await this.blacklistToken(token);
+    }
+
+    return { message: 'Đăng xuất thành công' };
+  }
+
+  private async blacklistToken(token: string): Promise<void> {
+    try {
+      const decoded = this.appJwtService.decodeToken(token);
+      if (decoded?.exp) {
+        const ttl = (decoded.exp as number) - Math.floor(Date.now() / 1000);
+        if (ttl > 0) {
+          await this.appCacheService.set(
+            AppCacheKeys.blacklistedToken(token),
+            true,
+            ttl
+          );
+        }
+      }
+    } catch {
+      console.error('Cannot blacklist token due to invalid token format');
     }
   }
 
