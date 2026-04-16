@@ -12,6 +12,7 @@ import {
   HttpClientRequestOptions,
   HttpClientServiceInterface
 } from './interface/http-client.service.interface';
+import { MetricsService } from '@core/modules/metrics/metrics.service';
 
 @Injectable()
 export class HttpClientService implements HttpClientServiceInterface {
@@ -19,7 +20,8 @@ export class HttpClientService implements HttpClientServiceInterface {
 
   constructor(
     private httpService: HttpService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly metricsService: MetricsService
   ) {
     this.defaultTimeoutMs = this.configService.get<number>(
       'httpClient.timeoutMs',
@@ -78,6 +80,9 @@ export class HttpClientService implements HttpClientServiceInterface {
       data?: unknown;
     }
   ): Promise<T> {
+    const startedAt = Date.now();
+    const target = this.resolveTarget(url);
+
     const config: AxiosRequestConfig = {
       method,
       url,
@@ -91,10 +96,54 @@ export class HttpClientService implements HttpClientServiceInterface {
 
     try {
       const response = await this.httpService.axiosRef.request<T>(config);
+
+      this.metricsService.observeOutboundRequest({
+        method,
+        target,
+        statusCode: response.status,
+        durationMs: Date.now() - startedAt
+      });
+
       return response.data;
     } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string | string[] }>;
+
+      this.metricsService.observeOutboundRequest({
+        method,
+        target,
+        statusCode: axiosError.response?.status,
+        durationMs: Date.now() - startedAt,
+        errorType: this.resolveErrorType(axiosError)
+      });
+
       throw this.normalizeError(error);
     }
+  }
+
+  private resolveTarget(url: string): string {
+    try {
+      return new URL(url).host || 'unknown_target';
+    } catch {
+      return url.split('?')[0].slice(0, 120) || 'unknown_target';
+    }
+  }
+
+  private resolveErrorType(
+    axiosError: AxiosError<{ message?: string | string[] }>
+  ): string {
+    if (axiosError.code) {
+      return axiosError.code;
+    }
+
+    if (axiosError.response) {
+      return 'http_error';
+    }
+
+    if (axiosError.request) {
+      return 'network_error';
+    }
+
+    return 'unknown_error';
   }
 
   private normalizeError(error: unknown): HttpException {

@@ -41,7 +41,7 @@ async function bootstrap() {
   app.use(compression());
 
   app.setGlobalPrefix('api', {
-    exclude: ['health', 'health/liveness', 'health/readiness']
+    exclude: ['health', 'health/liveness', 'health/readiness', 'metrics']
   });
 
   app.enableVersioning({
