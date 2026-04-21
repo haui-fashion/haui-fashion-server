@@ -10,7 +10,14 @@ import {
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-const reviewInclude = {
+const reviewSelect = Prisma.validator<Prisma.ReviewSelect>()({
+  id: true,
+  userId: true,
+  productId: true,
+  star: true,
+  content: true,
+  createdAt: true,
+  updatedAt: true,
   user: {
     select: {
       fullname: true
@@ -23,7 +30,7 @@ const reviewInclude = {
       name: true
     }
   }
-} as const;
+});
 
 @Injectable()
 export class ReviewRepository extends BaseRepository<
@@ -90,7 +97,7 @@ export class ReviewRepository extends BaseRepository<
       skip,
       take: limit,
       orderBy: finalOrderBy,
-      include: reviewInclude
+      select: reviewSelect
     });
     const countPromise = this.datasource.count(where);
 
@@ -109,7 +116,7 @@ export class ReviewRepository extends BaseRepository<
 
   async findById(id: string): Promise<ReviewRecordEntity | null> {
     return this.datasource.findById(id, {
-      include: reviewInclude
+      select: reviewSelect
     }) as Promise<ReviewRecordEntity | null>;
   }
 
@@ -117,17 +124,22 @@ export class ReviewRepository extends BaseRepository<
     userId: string,
     productId: string
   ): Promise<ReviewRecordEntity | null> {
-    return this.datasource.findOneByCondition({
-      userId,
-      productId
-    } as Prisma.ReviewWhereInput) as Promise<ReviewRecordEntity | null>;
+    return this.datasource.findOneByCondition(
+      {
+        userId,
+        productId
+      } as Prisma.ReviewWhereInput,
+      {
+        select: reviewSelect
+      }
+    ) as Promise<ReviewRecordEntity | null>;
   }
 
   async createReview(
     data: Prisma.ReviewCreateInput
   ): Promise<ReviewRecordEntity> {
     return this.datasource.create(data, {
-      include: reviewInclude
+      select: reviewSelect
     }) as Promise<ReviewRecordEntity>;
   }
 
@@ -136,13 +148,13 @@ export class ReviewRepository extends BaseRepository<
     data: Prisma.ReviewUpdateInput
   ): Promise<ReviewRecordEntity> {
     return this.datasource.updateById(id, data, {
-      include: reviewInclude
+      select: reviewSelect
     }) as Promise<ReviewRecordEntity>;
   }
 
   async deleteReview(id: string): Promise<ReviewRecordEntity> {
     return this.datasource.deleteById(id, {
-      include: reviewInclude
+      select: reviewSelect
     }) as Promise<ReviewRecordEntity>;
   }
 }

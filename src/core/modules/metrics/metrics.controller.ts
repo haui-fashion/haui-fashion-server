@@ -1,4 +1,5 @@
 import { Public } from '@core/utilities/decorators/public.decorator';
+import { SkipTransformResponse } from '@core/utilities/interceptors/transform-response.interceptor';
 import {
   Controller,
   Get,
@@ -17,6 +18,7 @@ export class MetricsController {
   @Get()
   @Version(VERSION_NEUTRAL)
   @Header('Content-Type', METRICS_CONTENT_TYPE)
+  @SkipTransformResponse()
   async getMetrics(): Promise<string> {
     return this.metricsService.getMetrics();
   }

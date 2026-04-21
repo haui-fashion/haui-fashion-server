@@ -9,13 +9,14 @@ import { ReviewRepository } from '@components/reviews/repositories/review.reposi
 import { PrismaService } from '@core/modules/prisma';
 import { CurrentUserDto } from '@core/utilities/decorators';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, Role } from '@prisma/client';
+import { OrderStatus, Prisma, Role } from '@prisma/client';
 
 @Injectable()
 export class ReviewService {
@@ -41,6 +42,7 @@ export class ReviewService {
   async create(user: CurrentUserDto, dto: CreateReviewDto) {
     await this.assertUserExists(user.userId);
     await this.assertProductExists(dto.productId);
+    await this.assertUserPurchasedProduct(user.userId, dto.productId);
 
     const existing = await this.reviewRepository.findByUserAndProduct(
       user.userId,
@@ -144,6 +146,29 @@ export class ReviewService {
     if (!product) {
       throw new NotFoundException(
         `Không tìm thấy sản phẩm với id ${productId}`
+      );
+    }
+  }
+
+  private async assertUserPurchasedProduct(userId: string, productId: string) {
+    const purchasedOrder = await this.prisma.order.findFirst({
+      where: {
+        userId,
+        status: OrderStatus.COMPLETED,
+        items: {
+          some: {
+            variant: {
+              productId
+            }
+          }
+        }
+      },
+      select: { id: true }
+    });
+
+    if (!purchasedOrder) {
+      throw new BadRequestException(
+        'Bạn chỉ có thể đánh giá sản phẩm sau khi đã mua và nhận hàng thành công'
       );
     }
   }
