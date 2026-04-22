@@ -249,6 +249,7 @@ export class ChatbotConversationService {
         sessionId: result.sessionId,
         intent: result.intent,
         hasProducts: result.hasProducts,
+        items: result.products,
         answer: result.answer,
         replyMode: result.replyMode,
         waitingForAdmin: result.waitingForAdmin === true
