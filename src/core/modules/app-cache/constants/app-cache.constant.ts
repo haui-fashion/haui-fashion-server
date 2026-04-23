@@ -27,7 +27,7 @@ export const AppCacheKeys = {
 
 export const AppCacheTtl = {
   userInfo: 60 * 60 * 1000,
-  emailVerification: 24 * 60 * 60 * 1000,
+  emailVerification: 15 * 60 * 1000,
   emailVerificationCooldown: 60 * 1000,
   passwordReset: 15 * 60 * 1000,
   passwordResetCooldown: 5 * 60 * 1000,

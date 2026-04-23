@@ -105,9 +105,15 @@ export class AuthService {
     }
 
     if (!user.isVerified) {
-      throw new UnauthorizedException(
-        'Tài khoản chưa được xác minh email. Vui lòng kiểm tra hộp thư để xác minh.'
-      );
+      throw new UnauthorizedException({
+        message:
+          'Tài khoản chưa được xác minh email. Vui lòng kiểm tra hộp thư để xác minh.',
+        error: 'Unauthorized',
+        details: {
+          code: 'EMAIL_NOT_VERIFIED',
+          email: user.email
+        }
+      });
     }
 
     const isPasswordValid = await UserService.isPasswordMatch(
@@ -466,7 +472,7 @@ export class AuthService {
         context: {
           name: fullname,
           verifyUrl,
-          expiredInHours: Math.floor(AppCacheTtl.emailVerification / 3600000)
+          expiredInMinutes: Math.floor(AppCacheTtl.emailVerification / 60000)
         }
       });
     } catch (error) {

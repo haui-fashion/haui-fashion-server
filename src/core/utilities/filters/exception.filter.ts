@@ -118,20 +118,22 @@ export class AppExceptionFilter implements ExceptionFilter {
 
     if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
       const response = exceptionResponse as Record<string, unknown>;
+      const explicitDetails = response['details'];
 
       // Handle class-validator errors (array of messages)
       const rawMessage: unknown = response['message'];
       let message: string;
-      let details: string[] | undefined;
+      let details: unknown;
 
       if (Array.isArray(rawMessage)) {
         message = (rawMessage[0] as string) || 'Xác thực không thành công';
-        details = rawMessage as string[];
+        details = explicitDetails ?? (rawMessage as string[]);
       } else {
         message =
           typeof rawMessage === 'string'
             ? rawMessage
             : 'Đã xảy ra lỗi không mong muốn';
+        details = explicitDetails;
       }
 
       return {
