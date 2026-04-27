@@ -18,6 +18,17 @@ export interface ProductCardPayload {
   imageUrl?: string;
 }
 
+export interface OrderCardPayload {
+  id?: string;
+  code?: string;
+  status?: string;
+  totalAmount?: string;
+  createdAt?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  itemCount?: number;
+}
+
 export interface ConversationMetadata {
   replyMode?: ChatbotReplyMode;
   modeUpdatedAt?: string;
@@ -57,8 +68,10 @@ export interface PromptChatResult {
   sessionId: string;
   intent: string;
   hasProducts: boolean;
+  hasOrders: boolean;
   answer: string;
   products: ProductCardPayload[];
+  orders: OrderCardPayload[];
   replyMode: ChatbotReplyMode;
   waitingForAdmin?: boolean;
 }
@@ -70,6 +83,7 @@ export interface AdminChatMessageItem {
   content: string;
   intent: string | null;
   products?: ProductCardPayload[];
+  orders?: OrderCardPayload[];
   createdAt: Date;
 }
 

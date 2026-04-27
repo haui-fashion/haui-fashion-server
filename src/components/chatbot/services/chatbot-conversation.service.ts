@@ -10,6 +10,7 @@ import {
   ConversationMetadata,
   HumanAdminReplyEventPayload,
   HumanUserMessageEventPayload,
+  OrderCardPayload,
   ProductCardPayload,
   PromptChatResult,
   SetConversationReplyModeResult,
@@ -188,6 +189,9 @@ export class ChatbotConversationService {
             content: message.content,
             intent: message.intent,
             products: this.parseProductPayload(message.productPayload),
+            orders: this.parseOrderPayload(
+              this.extractOrderPayloadFromMetadata(message.metadata)
+            ),
             createdAt: message.createdAt
           }))
       })),
@@ -242,6 +246,16 @@ export class ChatbotConversationService {
       });
     }
 
+    if (result.orders.length > 0) {
+      observer.next({
+        type: 'orders',
+        data: {
+          hasOrders: true,
+          items: result.orders
+        }
+      });
+    }
+
     observer.next({
       type: 'done',
       data: {
@@ -250,6 +264,8 @@ export class ChatbotConversationService {
         intent: result.intent,
         hasProducts: result.hasProducts,
         items: result.products,
+        hasOrders: result.hasOrders,
+        orders: result.orders,
         answer: result.answer,
         replyMode: result.replyMode,
         waitingForAdmin: result.waitingForAdmin === true
@@ -306,9 +322,11 @@ export class ChatbotConversationService {
         sessionId: conversation.sessionKey,
         intent: 'HUMAN_HANDOFF',
         hasProducts: false,
+        hasOrders: false,
         answer:
           'Tin nhắn của bạn đã được chuyển cho tư vấn viên. Vui lòng chờ trong giây lát.',
         products: [],
+        orders: [],
         replyMode,
         waitingForAdmin: true
       };
@@ -344,6 +362,7 @@ export class ChatbotConversationService {
       assistantResult.toolCalls,
       assistantResult.recommendedProductIds
     );
+    const orderCards = this.extractOrderCards(assistantResult.toolCalls);
 
     await this.persistMessage({
       conversationId: conversation.id,
@@ -353,8 +372,11 @@ export class ChatbotConversationService {
       toolCalls: assistantResult.toolCalls as unknown as Prisma.InputJsonValue,
       productPayload: productCards as unknown as Prisma.InputJsonValue,
       metadata: {
-        traceId: input.traceId || null
-      }
+        traceId: input.traceId || null,
+        ...(orderCards.length > 0 && {
+          orderPayload: orderCards
+        })
+      } as unknown as Prisma.InputJsonValue
     });
 
     await this.prisma.chatConversation.update({
@@ -372,8 +394,10 @@ export class ChatbotConversationService {
       sessionId: conversation.sessionKey,
       intent: intent.intent,
       hasProducts: productCards.length > 0,
+      hasOrders: orderCards.length > 0,
       answer: assistantResult.answer,
       products: productCards,
+      orders: orderCards,
       replyMode: CHATBOT_REPLY_MODE.AI,
       waitingForAdmin: false
     };
@@ -490,6 +514,9 @@ export class ChatbotConversationService {
         content: adminMessage.content,
         intent: adminMessage.intent,
         products: this.parseProductPayload(adminMessage.productPayload),
+        orders: this.parseOrderPayload(
+          this.extractOrderPayloadFromMetadata(adminMessage.metadata)
+        ),
         createdAt: adminMessage.createdAt
       }
     };
@@ -607,7 +634,10 @@ export class ChatbotConversationService {
       content: message.content,
       createdAt: message.createdAt,
       metadata: message.metadata,
-      products: this.parseProductPayload(message.productPayload)
+      products: this.parseProductPayload(message.productPayload),
+      orders: this.parseOrderPayload(
+        this.extractOrderPayloadFromMetadata(message.metadata)
+      )
     };
   }
 
@@ -831,6 +861,46 @@ export class ChatbotConversationService {
       : allCards.slice(0, 3);
   }
 
+  private extractOrderCards(
+    toolCalls: ToolInvocationLog[]
+  ): OrderCardPayload[] {
+    const cards = new Map<string, OrderCardPayload>();
+
+    for (const toolCall of toolCalls) {
+      const name = toolCall.name;
+      const result = this.asRecord(toolCall.result);
+      const ok = result?.ok === true;
+      const data = this.asRecord(result?.data);
+
+      if (!ok || !name || !data) {
+        continue;
+      }
+
+      if (name === 'list_user_orders') {
+        const items = Array.isArray(data.items) ? data.items : [];
+
+        for (const item of items) {
+          const order = this.asRecord(item);
+          if (!order) {
+            continue;
+          }
+
+          const card = this.toOrderCard(order);
+          const cardKey = card.id || card.code || randomUUID();
+          cards.set(cardKey, card);
+        }
+      }
+
+      if (name === 'check_order_status') {
+        const card = this.toOrderCard(data);
+        const cardKey = card.id || card.code || randomUUID();
+        cards.set(cardKey, card);
+      }
+    }
+
+    return Array.from(cards.values()).slice(0, 5);
+  }
+
   private parseProductPayload(
     payload: Prisma.JsonValue | null
   ): ProductCardPayload[] {
@@ -864,6 +934,33 @@ export class ChatbotConversationService {
       });
   }
 
+  private parseOrderPayload(payload: unknown): OrderCardPayload[] {
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+
+    return payload
+      .map((item) => this.asRecord(item))
+      .filter((item): item is Record<string, unknown> => item != null)
+      .map((item) => ({
+        id: this.asString(item.id),
+        code: this.asString(item.code),
+        status: this.asString(item.status),
+        totalAmount: this.asString(item.totalAmount),
+        createdAt: this.asIsoDate(item.createdAt),
+        paymentMethod: this.asString(item.paymentMethod),
+        paymentStatus: this.asString(item.paymentStatus),
+        itemCount: this.asNumber(item.itemCount)
+      }));
+  }
+
+  private extractOrderPayloadFromMetadata(
+    metadata: Prisma.JsonValue | null
+  ): unknown {
+    const parsed = this.asRecord(metadata);
+    return parsed?.orderPayload;
+  }
+
   private toProductCard(product: Record<string, unknown>): ProductCardPayload {
     const images = Array.isArray(product.images) ? product.images : [];
     const firstImage = images.length > 0 ? this.asRecord(images[0]) : null;
@@ -879,6 +976,26 @@ export class ChatbotConversationService {
       brand: this.asString(product.brand),
       price: resolvedPrice,
       imageUrl: this.asString(file?.url)
+    };
+  }
+
+  private toOrderCard(order: Record<string, unknown>): OrderCardPayload {
+    const payment = this.asRecord(order.payment);
+    const items = Array.isArray(order.items) ? order.items : [];
+    const totalAmount = this.asNumber(order.totalAmount);
+
+    return {
+      id: this.asString(order.id),
+      code: this.asString(order.code),
+      status: this.asString(order.status),
+      totalAmount:
+        totalAmount != null
+          ? String(totalAmount)
+          : this.asString(order.totalAmount),
+      createdAt: this.asIsoDate(order.createdAt),
+      paymentMethod: this.asString(payment?.method),
+      paymentStatus: this.asString(payment?.status),
+      itemCount: items.length > 0 ? items.length : undefined
     };
   }
 
@@ -962,5 +1079,25 @@ export class ChatbotConversationService {
 
     const parsed = Number(stringValue);
     return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  private asIsoDate(value: unknown): string | undefined {
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (!normalized) {
+        return undefined;
+      }
+
+      const parsedDate = new Date(normalized);
+      return Number.isNaN(parsedDate.getTime())
+        ? normalized
+        : parsedDate.toISOString();
+    }
+
+    return undefined;
   }
 }
