@@ -10,7 +10,11 @@ import { UpsertVariantGroupDto } from '@components/products/dtos/upsert-variant-
 import { VirtualTryOnDto } from '@components/products/dtos/virtual-try-on.dto';
 import { ProductService } from '@components/products/services/product.service';
 import { VirtualTryOnService } from '@components/products/services/virtual-try-on.service';
-import { Public } from '@core/utilities/decorators';
+import {
+  CurrentUser,
+  CurrentUserDto,
+  Public
+} from '@core/utilities/decorators';
 import { Roles } from '@core/utilities/decorators/roles.decorator';
 import {
   Body,
@@ -144,8 +148,11 @@ export class ProductController {
   @Get('slug/:slug')
   @Public()
   @ApiOperation({ summary: 'Public get product by slug (active only)' })
-  findBySlug(@Param('slug') slug: string) {
-    return this.productService.findBySlug(slug);
+  findBySlug(
+    @Param('slug') slug: string,
+    @CurrentUser() user?: CurrentUserDto
+  ) {
+    return this.productService.findBySlug(slug, undefined, user?.userId);
   }
 
   @Get(':id/recommendations')
@@ -193,8 +200,8 @@ export class ProductController {
   @Get(':id')
   @Public()
   @ApiOperation({ summary: 'Public get product by ID (active only)' })
-  findOne(@Param('id') id: string) {
-    return this.productService.findById(id);
+  findOne(@Param('id') id: string, @CurrentUser() user?: CurrentUserDto) {
+    return this.productService.findById(id, undefined, user?.userId);
   }
 
   @Patch(':id')

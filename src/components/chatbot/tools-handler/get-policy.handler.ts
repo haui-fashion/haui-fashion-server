@@ -49,7 +49,7 @@ export class GetPolicyHandler {
         content: [
           '• Hoàn tiền sau 5–7 ngày làm việc kể từ ngày nhận được hàng trả hợp lệ.',
           '• COD: hoàn qua chuyển khoản ngân hàng (cần cung cấp số tài khoản).',
-          '• VNPay/MoMo: hoàn về tài khoản của bạn.',
+          '• VNPay/SePay: hoàn về tài khoản của bạn.',
           '• Số tiền hoàn: 100% giá trị sản phẩm nếu lỗi do chúng tôi. Trừ phí ship nếu đổi do sở thích khách.',
           '• Phí vận chuyển ban đầu không được hoàn trừ trường hợp lỗi do HaUI Fashion.'
         ].join('\n')
@@ -84,7 +84,7 @@ export class GetPolicyHandler {
           '• Thông tin cá nhân được mã hóa và bảo mật theo quy định pháp luật Việt Nam.',
           '• Chúng tôi thu thập: họ tên, email, SĐT, địa chỉ giao hàng, lịch sử mua hàng, cookie.',
           '• Không bán hoặc cho thuê thông tin cá nhân cho bên thứ ba.',
-          '• Chỉ chia sẻ với: đối tác vận chuyển GHN, cổng thanh toán VNPay/MoMo, Google Analytics (ẩn danh), cơ quan pháp luật khi có yêu cầu hợp pháp.',
+          '• Chỉ chia sẻ với: đối tác vận chuyển GHN, cổng thanh toán VNPay/SePay, Google Analytics (ẩn danh), cơ quan pháp luật khi có yêu cầu hợp pháp.',
           '• Mật khẩu được hash một chiều, thông tin thẻ không được lưu.',
           '• Quyền người dùng: truy cập, chỉnh sửa, xóa dữ liệu.',
           '• Yêu cầu xóa dữ liệu: email privacy@hauifashion.com với tiêu đề "Yêu cầu xóa dữ liệu cá nhân".'
@@ -94,7 +94,7 @@ export class GetPolicyHandler {
         title: 'Chính sách thanh toán',
         url: '/faq',
         content: [
-          '• Hỗ trợ: COD (tiền mặt khi nhận hàng), VNPay (ATM/Internet Banking/Visa/Mastercard), MoMo (ví điện tử).',
+          '• Hỗ trợ: COD (tiền mặt khi nhận hàng), VNPay (ATM/Internet Banking/Visa/Mastercard), SePay (cổng thanh toán trực tuyến).',
           '• Thanh toán online được xác nhận ngay lập tức.',
           '• COD: kiểm tra hàng trước khi thanh toán, thanh toán khi ký nhận.',
           '• Giao dịch được mã hóa SSL, chúng tôi không lưu thông tin thẻ.',

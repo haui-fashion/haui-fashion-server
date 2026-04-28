@@ -3,7 +3,7 @@ import { PreviewOrderDto } from '@components/orders/dtos/preview-order.dto';
 import { QueryOrderDto } from '@components/orders/dtos/query-order.dto';
 import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-status.dto';
 import { OrderService } from '@components/orders/services/order.service';
-import { MoMoIpnBody } from '@core/modules/momo';
+import { SePayIpnBody } from '@core/modules/sepay';
 import {
   CurrentUser,
   CurrentUserDto,
@@ -14,6 +14,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Param,
   Patch,
@@ -84,22 +85,25 @@ export class OrderController {
   }
 
   @Public()
-  @Post('momo-ipn')
+  @Post('sepay-ipn')
   @HttpCode(204)
   @ApiOperation({
-    summary: 'MoMo IPN callback (server-to-server, no auth required)'
+    summary: 'SePay IPN callback (server-to-server, no auth required)'
   })
-  async momoIpn(@Body() body: MoMoIpnBody) {
-    await this.orderService.handleMomoIpn(body);
+  async sepayIpn(
+    @Body() body: SePayIpnBody,
+    @Headers('x-secret-key') secretKey?: string
+  ) {
+    await this.orderService.handleSePayIpn(body, secretKey);
   }
 
   @Public()
-  @Get('momo-return')
+  @Get('sepay-return')
   @ApiOperation({
-    summary: 'MoMo return URL handler (no auth required)'
+    summary: 'SePay return URL handler (no auth required)'
   })
-  momoReturn(@Query() query: Record<string, string>) {
-    return this.orderService.handleMomoReturn(query);
+  sepayReturn(@Query() query: Record<string, string>) {
+    return this.orderService.handleSePayReturn(query);
   }
 
   @Get('admin')
@@ -141,13 +145,13 @@ export class OrderController {
     return await this.orderService.retryMyVnpayPayment(id, user.userId, ipAddr);
   }
 
-  @Post(':id/retry-momo')
-  @ApiOperation({ summary: 'Retry MoMo payment for my pending order' })
-  async retryMomoPayment(
+  @Post(':id/retry-sepay')
+  @ApiOperation({ summary: 'Retry SePay payment for my pending order' })
+  async retrySePayPayment(
     @CurrentUser() user: CurrentUserDto,
     @Param('id') id: string
   ) {
-    return await this.orderService.retryMyMomoPayment(id, user.userId);
+    return await this.orderService.retryMySePayPayment(id, user.userId);
   }
 
   @Get(':id')

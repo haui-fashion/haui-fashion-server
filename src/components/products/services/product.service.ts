@@ -54,24 +54,24 @@ export class ProductService {
     return this.productRepository.autocomplete(keyword, limit);
   }
 
-  async findById(id: string, userRole?: Role) {
+  async findById(id: string, userRole?: Role, userId?: string) {
     const product = await this.productRepository.findById(id, {
       includeInactive: userRole === Role.ADMIN
     });
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với id ${id}`);
     }
-    return this.toProductResponse(product as any);
+    return await this.toProductResponse(product as any, userId);
   }
 
-  async findBySlug(slug: string, userRole?: Role) {
+  async findBySlug(slug: string, userRole?: Role, userId?: string) {
     const product = await this.productRepository.findBySlug(slug, {
       includeInactive: userRole === Role.ADMIN
     });
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với slug "${slug}"`);
     }
-    return this.toProductResponse(product as any);
+    return await this.toProductResponse(product as any, userId);
   }
 
   async findBestSellers(limit: number = 8) {
@@ -149,7 +149,7 @@ export class ProductService {
 
     try {
       const created = await this.productRepository.createProduct(createData);
-      return this.toProductResponse(created as any);
+      return await this.toProductResponse(created as any);
     } catch (error) {
       if (this.isUniqueConstraintError(error, 'slug')) {
         throw new ConflictException(`Sản phẩm với slug "${slug}" đã tồn tại`);
@@ -460,7 +460,7 @@ export class ProductService {
       embeddingSyncStatus: EmbeddingSyncStatus.PENDING
     });
 
-    return this.toProductResponse(updated as any);
+    return await this.toProductResponse(updated as any);
   }
 
   async softDeleteStock(id: string) {
@@ -811,7 +811,7 @@ export class ProductService {
     );
   }
 
-  private toProductResponse(product: any) {
+  private async toProductResponse(product: any, userId?: string) {
     const allImages = Array.isArray(product.images) ? product.images : [];
     const fallbackImages = allImages.filter(
       (image: any) => !image.optionValueId
@@ -861,10 +861,36 @@ export class ProductService {
       });
     }
 
+    // Check if user can review this product (if they have purchased it)
+    let canReview = false;
+    if (userId) {
+      canReview = await this.userHasPurchasedProduct(userId, product.id);
+    }
+
     return {
       ...product,
-      variantGroups
+      variantGroups,
+      canReview
     };
+  }
+
+  private async userHasPurchasedProduct(
+    userId: string,
+    productId: string
+  ): Promise<boolean> {
+    const purchase = await this.prisma.orderItem.findFirst({
+      where: {
+        variant: {
+          productId
+        },
+        order: {
+          userId
+        }
+      },
+      select: { id: true }
+    });
+
+    return !!purchase;
   }
 
   private toProductListResponse(product: any) {

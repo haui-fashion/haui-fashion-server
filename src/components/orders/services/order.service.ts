@@ -12,8 +12,8 @@ import { UpdateOrderStatusDto } from '@components/orders/dtos/update-order-statu
 import { OrderRepository } from '@components/orders/repositories/order.repository';
 import { ShippingService } from '@components/shipping/services/shipping.service';
 import { MailService } from '@core/modules/mail/services/mail.service';
-import { MoMoIpnBody, MoMoService } from '@core/modules/momo';
 import { EntityCodeService, PrismaService } from '@core/modules/prisma';
+import { SePayIpnBody, SePayService } from '@core/modules/sepay';
 import { VNPayService } from '@core/modules/vnpay';
 import {
   BadRequestException,
@@ -32,7 +32,7 @@ import {
 } from '@prisma/client';
 
 const ONLINE_PAYMENT_TTL_HOURS = 1;
-const ORDER_DETAIL_URL_BASE = 'https://www.hauifashion.com/order';
+const ORDER_DETAIL_URL_BASE = 'https://www.hauifashion.com/profile/orders';
 const ORDER_ITEM_PLACEHOLDER_IMAGE = 'https://placehold.co/80x80?text=No+Image';
 const ORDER_CANCELED_BY_ADMIN_LABEL = 'Quản trị viên';
 const ORDER_CANCELED_BY_SYSTEM_LABEL = 'Hệ thống';
@@ -112,7 +112,7 @@ export class OrderService {
     private readonly mailService: MailService,
     private readonly shippingService: ShippingService,
     private readonly vnpayService: VNPayService,
-    private readonly momoService: MoMoService
+    private readonly sepayService: SePayService
   ) {}
 
   async createFromMyCart(userId: string, dto: CreateOrderDto, ipAddr?: string) {
@@ -136,6 +136,13 @@ export class OrderService {
     } = checkoutContext;
 
     const paymentMethod = dto.paymentMethod ?? PaymentMethod.COD;
+
+    if (paymentMethod === PaymentMethod.MOMO) {
+      throw new BadRequestException(
+        'Phương thức thanh toán MoMo đã ngừng hỗ trợ. Vui lòng chọn VNPay hoặc SePay.'
+      );
+    }
+
     const initialOrderStatus =
       paymentMethod === PaymentMethod.COD
         ? OrderStatus.TO_DELIVERY
@@ -279,17 +286,29 @@ export class OrderService {
           return { ...created, paymentUrl };
         }
 
-        // Generate MoMo payment URL if payment method is MOMO
-        if (paymentMethod === PaymentMethod.MOMO && created.payment) {
-          const paymentUrl = await this.momoService.createPaymentUrl({
+        if (paymentMethod === PaymentMethod.SEPAY && created.payment) {
+          const paymentForm = this.sepayService.createCheckoutForm({
             txnRef: created.payment.code,
             amount: Number(totalAmount),
-            orderInfo: `Thanh toan don hang ${orderCode}`
+            customerId: user.code,
+            orderInfo: `Thanh toan don hang ${orderCode}`,
+            successUrl: this.sepayService.buildReturnUrl(
+              'success',
+              created.payment.code
+            ),
+            errorUrl: this.sepayService.buildReturnUrl(
+              'error',
+              created.payment.code
+            ),
+            cancelUrl: this.sepayService.buildReturnUrl(
+              'cancel',
+              created.payment.code
+            )
           });
 
           await this.sendOrderCreatedEmail(created.id);
 
-          return { ...created, paymentUrl };
+          return { ...created, paymentForm };
         }
 
         await this.sendOrderCreatedEmail(created.id);
@@ -459,24 +478,53 @@ export class OrderService {
   }
 
   /**
-   * Handle MoMo IPN (Instant Payment Notification) callback.
-   * This is called server-to-server by MoMo via POST with JSON body.
+   * Handle SePay IPN callback.
+   * This is called server-to-server by SePay via POST with JSON body.
    * Must respond with HTTP 204 No Content.
    */
-  async handleMomoIpn(body: MoMoIpnBody): Promise<void> {
-    const { isValid } = this.momoService.verifyIpnSignature(body);
+  async handleSePayIpn(
+    body: SePayIpnBody,
+    secretKeyHeader?: string
+  ): Promise<void> {
+    const verification = this.sepayService.verifyIpnSecretKey(secretKeyHeader);
 
-    if (!isValid) {
+    if (!verification.isValid) {
       this.logger.warn(
-        `MoMo IPN: Invalid signature for orderId=${body.orderId}`
+        `SePay IPN: Invalid secret key, notificationType=${body.notification_type}`
       );
       return;
     }
 
-    const txnRef = body.orderId;
-    const momoAmount = body.amount;
-    const resultCode = body.resultCode;
-    const transId = String(body.transId);
+    const txnRef = body.order?.order_invoice_number;
+    if (!txnRef) {
+      this.logger.warn('SePay IPN: Missing order_invoice_number');
+      return;
+    }
+
+    const orderStatus = body.order?.order_status;
+    const notificationType = body.notification_type;
+    const transactionStatus = body.transaction?.transaction_status;
+    const providerTransactionId =
+      body.transaction?.transaction_id || body.order?.order_id;
+    const sepayAmount = Number(
+      body.order?.order_amount || body.transaction?.transaction_amount || 0
+    );
+
+    const isSuccess =
+      notificationType === 'ORDER_PAID' ||
+      this.sepayService.isPaidOrderStatus(orderStatus) ||
+      transactionStatus === 'APPROVED';
+    const isCanceled =
+      notificationType === 'TRANSACTION_VOID' ||
+      this.sepayService.isCanceledOrderStatus(orderStatus) ||
+      transactionStatus === 'VOIDED';
+
+    if (!isSuccess && !isCanceled) {
+      this.logger.log(
+        `SePay IPN: Skip unsupported state for txnRef=${txnRef}, notificationType=${notificationType}, orderStatus=${orderStatus}`
+      );
+      return;
+    }
 
     try {
       const payment = await this.prisma.payment.findUnique({
@@ -485,7 +533,7 @@ export class OrderService {
       });
 
       if (!payment) {
-        this.logger.warn(`MoMo IPN: Payment not found for orderId=${txnRef}`);
+        this.logger.warn(`SePay IPN: Payment not found for txnRef=${txnRef}`);
         return;
       }
 
@@ -494,7 +542,7 @@ export class OrderService {
         payment.order.status !== OrderStatus.PENDING
       ) {
         this.logger.log(
-          `MoMo IPN: Order already processed for orderId=${txnRef}, ` +
+          `SePay IPN: Order already processed for txnRef=${txnRef}, ` +
             `orderStatus=${payment.order.status}, paymentStatus=${payment.status}`
         );
         return;
@@ -504,7 +552,7 @@ export class OrderService {
       if (new Date() > paymentDeadline) {
         const canceled = await this.prisma.$transaction(async (tx) => {
           return this.failOrderAndRestoreStock(tx, payment.orderId, {
-            providerTransactionId: transId
+            providerTransactionId
           });
         });
 
@@ -517,23 +565,22 @@ export class OrderService {
         }
 
         this.logger.warn(
-          `MoMo IPN: Payment expired for orderId=${txnRef}, deadline=${paymentDeadline.toISOString()}`
+          `SePay IPN: Payment expired for txnRef=${txnRef}, deadline=${paymentDeadline.toISOString()}`
         );
         return;
       }
 
-      // Verify amount
       const paymentAmount = Number(payment.amount);
-      if (Math.round(paymentAmount) !== Math.round(momoAmount)) {
+      if (
+        Number.isFinite(sepayAmount) &&
+        Math.round(paymentAmount) !== Math.round(sepayAmount)
+      ) {
         this.logger.warn(
-          `MoMo IPN: Amount mismatch for orderId=${txnRef}. ` +
-            `Expected=${paymentAmount}, Got=${momoAmount}`
+          `SePay IPN: Amount mismatch for txnRef=${txnRef}. ` +
+            `Expected=${paymentAmount}, Got=${sepayAmount}`
         );
         return;
       }
-
-      // resultCode === 0 means success in MoMo
-      const isSuccess = resultCode === 0;
 
       const handled = await this.prisma.$transaction(async (tx) => {
         if (isSuccess) {
@@ -542,64 +589,159 @@ export class OrderService {
             payment.id,
             payment.orderId,
             {
-              providerTransactionId: transId
+              providerTransactionId
             }
           );
         }
 
         return this.failOrderAndRestoreStock(tx, payment.orderId, {
-          providerTransactionId: transId
+          providerTransactionId
         });
       });
 
       if (!handled) {
         this.logger.log(
-          `MoMo IPN: Skip because order is not pending anymore for orderId=${txnRef}`
+          `SePay IPN: Skip because order is not pending anymore for txnRef=${txnRef}`
         );
         return;
       }
 
       this.logger.log(
-        `MoMo IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} ` +
-          `for orderId=${txnRef}, transId=${transId}`
+        `SePay IPN: Payment ${isSuccess ? 'SUCCESS' : 'FAILED'} for txnRef=${txnRef}, providerTransactionId=${providerTransactionId}`
       );
 
       if (isSuccess) {
         await this.sendPaymentSuccessEmail(payment.orderId);
       }
     } catch (error) {
-      this.logger.error(`MoMo IPN: Error processing orderId=${txnRef}`, error);
+      this.logger.error(`SePay IPN: Error processing txnRef=${txnRef}`, error);
     }
   }
 
   /**
-   * Handle MoMo Redirect URL callback.
-   * Verifies the signature and returns payment result info for the frontend.
+   * Handle SePay ReturnURL callback.
+   * Return URL is used for user-facing feedback; payment state is finalized by IPN.
    */
-  handleMomoReturn(query: Record<string, string>) {
-    const { isValid } = this.momoService.verifyRedirectSignature(query);
+  async handleSePayReturn(query: Record<string, string>) {
+    const paymentCode = (query['paymentCode'] || '').trim();
+    const returnResult = (query['result'] || '').trim().toLowerCase();
 
-    if (!isValid) {
+    if (!paymentCode) {
       return {
         success: false,
-        message: 'Chữ ký không hợp lệ'
+        message: 'Thiếu thông tin mã thanh toán',
+        data: {
+          paymentCode: null,
+          status: 'UNKNOWN'
+        }
       };
     }
 
-    const resultCode = Number(query['resultCode']);
-    const isSuccess = resultCode === 0;
+    const payment = await this.prisma.payment.findUnique({
+      where: { code: paymentCode },
+      include: { order: true }
+    });
+
+    if (!payment || payment.method !== PaymentMethod.SEPAY) {
+      return {
+        success: false,
+        message: 'Không tìm thấy giao dịch SePay tương ứng',
+        data: {
+          paymentCode,
+          status: 'NOT_FOUND'
+        }
+      };
+    }
+
+    if (
+      returnResult === 'success' &&
+      payment.status === PaymentStatus.PENDING &&
+      payment.order.status === OrderStatus.PENDING
+    ) {
+      const gatewayOrder = await this.sepayService.findOrderByInvoiceNumber(
+        payment.code
+      );
+
+      if (gatewayOrder) {
+        const gatewayOrderStatus = gatewayOrder.order_status;
+        const gatewayAmount = Number(gatewayOrder.order_amount || 0);
+        const paymentAmount = Number(payment.amount);
+        const providerTransactionId =
+          gatewayOrder.transactions?.[0]?.transaction_id ||
+          gatewayOrder.order_id ||
+          undefined;
+
+        const amountMatched =
+          !Number.isFinite(gatewayAmount) ||
+          Math.round(gatewayAmount) === Math.round(paymentAmount);
+
+        if (amountMatched) {
+          if (this.sepayService.isPaidOrderStatus(gatewayOrderStatus)) {
+            const updated = await this.prisma.$transaction(async (tx) => {
+              return this.markOrderPaidFromPending(
+                tx,
+                payment.id,
+                payment.orderId,
+                {
+                  providerTransactionId
+                }
+              );
+            });
+
+            if (updated) {
+              await this.sendPaymentSuccessEmail(payment.orderId);
+            }
+          } else if (
+            this.sepayService.isCanceledOrderStatus(gatewayOrderStatus)
+          ) {
+            await this.prisma.$transaction(async (tx) => {
+              return this.failOrderAndRestoreStock(tx, payment.orderId, {
+                providerTransactionId
+              });
+            });
+          }
+        }
+      }
+    }
+
+    const latestPayment = await this.prisma.payment.findUnique({
+      where: { code: paymentCode },
+      include: { order: true }
+    });
+
+    if (!latestPayment) {
+      return {
+        success: false,
+        message: 'Không tìm thấy giao dịch SePay tương ứng',
+        data: {
+          paymentCode,
+          status: 'NOT_FOUND'
+        }
+      };
+    }
+
+    const isSuccess =
+      latestPayment.status === PaymentStatus.SUCCESS ||
+      latestPayment.order.status === OrderStatus.PAID;
+    const isFailed =
+      latestPayment.status === PaymentStatus.FAILED ||
+      latestPayment.order.status === OrderStatus.CANCELED;
+
+    const message = isSuccess
+      ? 'Giao dịch thành công'
+      : isFailed
+        ? 'Giao dịch không thành công hoặc đã bị hủy'
+        : 'Đang chờ SePay xác nhận thanh toán. Vui lòng kiểm tra lại trong giây lát.';
 
     return {
       success: isSuccess,
-      message: isSuccess
-        ? 'Giao dịch thành công'
-        : `Giao dịch không thành công. Mã lỗi: ${resultCode}`,
+      message,
       data: {
-        orderId: query['orderId'],
-        amount: Number(query['amount']),
-        orderInfo: query['orderInfo'],
-        transId: query['transId'],
-        resultCode
+        paymentCode,
+        orderId: latestPayment.orderId,
+        paymentStatus: latestPayment.status,
+        orderStatus: latestPayment.order.status,
+        providerTransactionId: latestPayment.providerTransactionId
       }
     };
   }
@@ -1031,7 +1173,7 @@ export class OrderService {
     };
   }
 
-  async retryMyMomoPayment(orderId: string, userId: string) {
+  async retryMySePayPayment(orderId: string, userId: string) {
     await this.expirePendingOnlineOrderById(orderId, userId);
 
     const order = await this.prisma.order.findFirst({
@@ -1052,9 +1194,9 @@ export class OrderService {
       throw new ConflictException('Đơn hàng chưa có thông tin thanh toán');
     }
 
-    if (order.payment.method !== PaymentMethod.MOMO) {
+    if (order.payment.method !== PaymentMethod.SEPAY) {
       throw new BadRequestException(
-        'Chỉ hỗ trợ tạo lại link thanh toán cho MOMO'
+        'Chỉ hỗ trợ tạo lại link thanh toán cho SEPAY'
       );
     }
 
@@ -1088,16 +1230,23 @@ export class OrderService {
       );
     }
 
-    const paymentUrl = await this.momoService.createPaymentUrl({
+    const paymentForm = this.sepayService.createCheckoutForm({
       txnRef: order.payment.code,
       amount: Number(order.payment.amount),
-      orderInfo: `Thanh toan don hang ${order.code}`
+      customerId: order.userId,
+      orderInfo: `Thanh toan don hang ${order.code}`,
+      successUrl: this.sepayService.buildReturnUrl(
+        'success',
+        order.payment.code
+      ),
+      errorUrl: this.sepayService.buildReturnUrl('error', order.payment.code),
+      cancelUrl: this.sepayService.buildReturnUrl('cancel', order.payment.code)
     });
 
     return {
       orderId: order.id,
       paymentCode: order.payment.code,
-      paymentUrl,
+      paymentForm,
       expiresAt: paymentDeadline.toISOString()
     };
   }
@@ -1148,7 +1297,7 @@ export class OrderService {
           is: {
             status: PaymentStatus.PENDING,
             method: {
-              in: [PaymentMethod.VNPAY, PaymentMethod.MOMO]
+              in: [PaymentMethod.VNPAY, PaymentMethod.SEPAY, PaymentMethod.MOMO]
             }
           }
         }
@@ -1175,7 +1324,7 @@ export class OrderService {
           is: {
             status: PaymentStatus.PENDING,
             method: {
-              in: [PaymentMethod.VNPAY, PaymentMethod.MOMO]
+              in: [PaymentMethod.VNPAY, PaymentMethod.SEPAY, PaymentMethod.MOMO]
             },
             createdAt: {
               lte: deadline
@@ -1222,6 +1371,7 @@ export class OrderService {
       order.status !== OrderStatus.PENDING ||
       order.payment.status !== PaymentStatus.PENDING ||
       (order.payment.method !== PaymentMethod.VNPAY &&
+        order.payment.method !== PaymentMethod.SEPAY &&
         order.payment.method !== PaymentMethod.MOMO)
     ) {
       return;
@@ -1563,6 +1713,8 @@ export class OrderService {
         return 'Thanh toán khi nhận hàng (COD)';
       case PaymentMethod.VNPAY:
         return 'VNPay';
+      case PaymentMethod.SEPAY:
+        return 'SePay';
       case PaymentMethod.MOMO:
         return 'MoMo';
       default:

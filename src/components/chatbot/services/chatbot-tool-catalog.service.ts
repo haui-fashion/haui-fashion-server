@@ -209,7 +209,7 @@ export class ChatbotToolCatalogService {
           },
           payment_method: {
             type: 'string',
-            enum: ['COD', 'VNPAY', 'MOMO'],
+            enum: ['COD', 'VNPAY', 'SEPAY'],
             description: 'Filter by Payment.method.'
           },
           payment_status: {

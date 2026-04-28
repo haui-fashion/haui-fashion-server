@@ -48,11 +48,11 @@ export class GetFaqHandler {
       payment: [
         {
           q: 'Phương thức thanh toán',
-          a: 'Hỗ trợ: (1) COD – Tiền mặt khi nhận hàng; (2) VNPay – ATM/Internet Banking, Visa/Mastercard; (3) MoMo – ví điện tử MoMo.'
+          a: 'Hỗ trợ: (1) COD – Tiền mặt khi nhận hàng; (2) VNPay – ATM/Internet Banking, Visa/Mastercard; (3) SePay – cổng thanh toán trực tuyến.'
         },
         {
           q: 'Thanh toán an toàn',
-          a: 'Hoàn toàn an toàn. Giao dịch được mã hóa SSL. Thông tin thẻ được xử lý qua VNPay/MoMo được Ngân hàng Nhà nước cấp phép – chúng tôi không lưu thông tin thẻ.'
+          a: 'Hoàn toàn an toàn. Giao dịch được mã hóa SSL. Thông tin thẻ được xử lý qua VNPay/SePay được Ngân hàng Nhà nước cấp phép – chúng tôi không lưu thông tin thẻ.'
         },
         {
           q: 'Hóa đơn VAT',
@@ -70,7 +70,7 @@ export class GetFaqHandler {
         },
         {
           q: 'Hoàn tiền mất bao lâu',
-          a: '5–7 ngày làm việc sau khi nhận và kiểm tra hàng trả. COD: chuyển khoản ngân hàng. VNPay/MoMo: hoàn về tài khoản.'
+          a: '5–7 ngày làm việc sau khi nhận và kiểm tra hàng trả. COD: chuyển khoản ngân hàng. VNPay/SePay: hoàn về tài khoản.'
         },
         {
           q: 'Điều kiện sản phẩm được đổi trả',

@@ -15,8 +15,8 @@ import { AppMailModule } from '@core/modules/mail/mail.module';
 import { MetricsModule } from '@core/modules/metrics/metrics.module';
 import { OllamaModule } from '@core/modules/ollama';
 import { PrismaModule } from '@core/modules/prisma';
+import { SePayModule } from '@core/modules/sepay';
 import { TiptapModule } from '@core/modules/tiptap';
-import { MoMoModule } from '@core/modules/momo';
 import { VNPayModule } from '@core/modules/vnpay';
 import { AppExceptionFilter } from '@core/utilities/filters';
 import {
@@ -52,7 +52,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     ScheduleModule.forRoot(),
     TiptapModule,
     VNPayModule,
-    MoMoModule,
+    SePayModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -103,7 +103,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     AppBullModule,
     LoggerModule,
     VNPayModule,
-    MoMoModule
+    SePayModule
   ]
 })
 export class CoreModule {}

@@ -120,16 +120,20 @@ export default () => {
         'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
       returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:3000/orders'
     },
-    momo: {
-      partnerCode: process.env.MOMO_PARTNER_CODE || '',
-      accessKey: process.env.MOMO_ACCESS_KEY || '',
-      secretKey: process.env.MOMO_SECRET_KEY || '',
-      apiUrl: process.env.MOMO_API_URL || 'https://test-payment.momo.vn',
-      redirectUrl:
-        process.env.MOMO_REDIRECT_URL || 'http://localhost:3000/orders',
+    sepay: {
+      merchantId: process.env.SEPAY_MERCHANT_ID || '',
+      secretKey: process.env.SEPAY_SECRET_KEY || '',
+      ipnSecretKey:
+        process.env.SEPAY_IPN_SECRET_KEY || process.env.SEPAY_SECRET_KEY || '',
+      checkoutUrl:
+        process.env.SEPAY_CHECKOUT_URL ||
+        'https://pay-sandbox.sepay.vn/v1/checkout/init',
+      apiBaseUrl:
+        process.env.SEPAY_API_BASE_URL || 'https://pgapi-sandbox.sepay.vn',
+      returnUrl: process.env.SEPAY_RETURN_URL || 'http://localhost:3000/orders',
       ipnUrl:
-        process.env.MOMO_IPN_URL ||
-        'http://localhost:3000/api/v1/orders/momo-ipn'
+        process.env.SEPAY_IPN_URL ||
+        'http://localhost:3000/api/v1/orders/sepay-ipn'
     }
   };
 };
