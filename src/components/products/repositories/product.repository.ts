@@ -643,6 +643,9 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
 
     const variantsColors = await this.prisma.variant.findMany({
       where: { productId: { in: productIds } },
+      orderBy: {
+        createdAt: 'desc'
+      },
       select: {
         productId: true,
         colorOptionValue: { select: { hexColor: true } }

@@ -405,7 +405,7 @@ export class OrderService {
 
       const handled = await this.prisma.$transaction(async (tx) => {
         if (isSuccess) {
-          return this.markOrderPaidFromPending(
+          const paid = await this.markOrderPaidFromPending(
             tx,
             payment.id,
             payment.orderId,
@@ -413,6 +413,12 @@ export class OrderService {
               providerTransactionId: transactionNo || undefined
             }
           );
+
+          if (paid) {
+            await this.autoTransitionPaidOrderToDelivery(tx, payment.orderId);
+          }
+
+          return paid;
         }
 
         return this.failOrderAndRestoreStock(tx, payment.orderId, {
@@ -1154,7 +1160,7 @@ export class OrderService {
       }
 
       throw new ConflictException(
-        'Đơn hàng đã quá thời gian thanh toán 12 giờ và đã được hủy.'
+        'Đơn hàng đã quá thời gian thanh toán 1 giờ và đã được hủy.'
       );
     }
 
@@ -1226,7 +1232,7 @@ export class OrderService {
       }
 
       throw new ConflictException(
-        'Đơn hàng đã quá thời gian thanh toán 12 giờ và đã được hủy.'
+        'Đơn hàng đã quá thời gian thanh toán 1 giờ và đã được hủy.'
       );
     }
 
@@ -1452,6 +1458,23 @@ export class OrderService {
     }
 
     return true;
+  }
+
+  private async autoTransitionPaidOrderToDelivery(
+    tx: Prisma.TransactionClient,
+    orderId: string
+  ): Promise<boolean> {
+    const updated = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        status: OrderStatus.PAID
+      },
+      data: {
+        status: OrderStatus.TO_DELIVERY
+      }
+    });
+
+    return updated.count > 0;
   }
 
   private async failOrderAndRestoreStock(
