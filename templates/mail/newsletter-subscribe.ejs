@@ -1,0 +1,23 @@
+<%- await include('layouts/base', { body: `
+    <h2 style="color: #1a1a1a; margin-top: 0;">Cảm ơn bạn đã đăng ký nhận bản tin!</h2>
+
+    <p>Xin chào <strong>${locals.email}</strong>,</p>
+
+    <p>
+      Chúng tôi rất vui vì bạn đã đăng ký nhận tin từ ${locals.appName || 'HaUI Fashion'}.
+      Từ bây giờ, bạn sẽ là một trong những người đầu tiên nhận được thông tin về
+      bộ sưu tập mới, các chương trình khuyến mãi và những ưu đãi đặc biệt.
+    </p>
+
+    <p>
+      Khi có sản phẩm mới hoặc chương trình phù hợp, chúng tôi sẽ gửi thông tin đến
+      hộp thư của bạn để bạn không bỏ lỡ bất kỳ ưu đãi nào.
+    </p>
+
+    <p>
+      Cảm ơn bạn đã đồng hành cùng HaUI Fashion. Nếu có câu hỏi hoặc cần hỗ trợ,
+      đội ngũ của chúng tôi luôn sẵn sàng.
+    </p>
+
+    <p style="margin-bottom: 0;">Trân trọng,<br>Đội ngũ HaUI Fashion</p>
+` }) %>
