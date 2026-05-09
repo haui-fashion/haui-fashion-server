@@ -9,3 +9,12 @@ export class EmbeddingRequest {
   @IsOptional()
   normalize?: boolean;
 }
+
+export class RerankRequest {
+  @IsString()
+  query: string;
+
+  @IsString({ each: true })
+  @IsArray()
+  texts: string[];
+}

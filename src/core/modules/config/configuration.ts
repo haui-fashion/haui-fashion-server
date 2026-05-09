@@ -121,6 +121,9 @@ export default () => {
       returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:3000/orders'
     },
     sepay: {
+      env:
+        (process.env.SEPAY_ENV as 'sandbox' | 'production' | undefined) ||
+        (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox'),
       merchantId: process.env.SEPAY_MERCHANT_ID || '',
       secretKey: process.env.SEPAY_SECRET_KEY || '',
       ipnSecretKey:

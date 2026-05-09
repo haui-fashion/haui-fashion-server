@@ -5,8 +5,11 @@ import {
   ServiceUnavailableException
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EmbeddingRequest } from '../dtos/embedding-request.dto';
-import { EmbeddingResponse } from '../dtos/embedding-response.dto';
+import { EmbeddingRequest, RerankRequest } from '../dtos/embedding-request.dto';
+import {
+  EmbeddingResponse,
+  RerankResponse
+} from '../dtos/embedding-response.dto';
 
 @Injectable()
 export class EmbeddingService {
@@ -70,6 +73,15 @@ export class EmbeddingService {
     return response.embeddings;
   }
 
+  async rerank(query: string, texts: string[]): Promise<number[]> {
+    const response = await this.requestRerank('/rerank', {
+      query,
+      texts
+    });
+
+    return response.scores;
+  }
+
   private async request(
     endpoint: '/query' | '/passage',
     payload: EmbeddingRequest
@@ -109,7 +121,41 @@ export class EmbeddingService {
     }
   }
 
-  private buildUrl(endpoint: '/query' | '/passage'): string {
+  private async requestRerank(
+    endpoint: '/rerank',
+    payload: RerankRequest
+  ): Promise<RerankResponse> {
+    if (payload.texts.length === 0) {
+      return {
+        model: 'unknown',
+        scores: []
+      };
+    }
+
+    const url = this.buildUrl(endpoint);
+
+    try {
+      const data = await this.httpClientService.post<RerankResponse>(
+        url,
+        payload,
+        {
+          timeoutMs: this.timeoutMs,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new ServiceUnavailableException(
+        `Rerank service is unavailable: ${message}`
+      );
+    }
+  }
+
+  private buildUrl(endpoint: '/query' | '/passage' | '/rerank'): string {
     return `${this.baseUrl.replace(/\/$/, '')}${endpoint}`;
   }
 }

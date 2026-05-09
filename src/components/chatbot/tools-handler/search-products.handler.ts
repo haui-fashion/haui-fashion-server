@@ -14,6 +14,23 @@ import { PrismaService } from '@core/modules/prisma';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+type RerankCandidateProduct = {
+  id: string;
+  name?: string;
+  brand?: string | null;
+  shortDescription?: string | null;
+  descriptionHtml?: string | null;
+  material?: string | null;
+  season?: string | null;
+  fit?: string | null;
+  gender?: string | null;
+  category?: { name?: string | null } | null;
+  variants?: Array<{
+    sizeOptionValue?: { value?: string | null } | null;
+    colorOptionValue?: { value?: string | null } | null;
+  }>;
+};
+
 @Injectable()
 export class SearchProductsHandler {
   private readonly logger = new Logger(SearchProductsHandler.name);
@@ -59,6 +76,7 @@ export class SearchProductsHandler {
     }
 
     let semanticProductIds: string[] | null = null;
+    let semanticProductScores: Map<string, number> | null = null;
 
     if (keyword) {
       try {
@@ -78,6 +96,12 @@ export class SearchProductsHandler {
 
         if (semanticResults.length > 0) {
           semanticProductIds = semanticResults.map((r) => r.product_id);
+          semanticProductScores = new Map(
+            semanticResults.map((result) => [
+              result.product_id,
+              result.similarity
+            ])
+          );
         }
       } catch (error) {
         this.logger.warn(
@@ -216,13 +240,12 @@ export class SearchProductsHandler {
       where.AND = and;
     }
 
-    const skip = (page - 1) * limit;
-
     const [items, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        skip,
-        take: limit,
+        ...(semanticProductIds
+          ? {}
+          : { skip: (page - 1) * limit, take: limit }),
         ...(semanticProductIds && {
           orderBy: undefined
         }),
@@ -288,14 +311,39 @@ export class SearchProductsHandler {
     const orderedItems = semanticProductIds
       ? (() => {
           const ids = semanticProductIds;
-          return items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+          return items.sort((a, b) => {
+            const scoreA = semanticProductScores?.get(a.id) ?? 0;
+            const scoreB = semanticProductScores?.get(b.id) ?? 0;
+
+            if (scoreA !== scoreB) {
+              return scoreB - scoreA;
+            }
+
+            return ids.indexOf(a.id) - ids.indexOf(b.id);
+          });
         })()
       : items;
+
+    let rerankedItems = orderedItems;
+
+    if (semanticProductIds && keyword && orderedItems.length > 1) {
+      try {
+        rerankedItems = await this.rerankProducts(keyword, orderedItems);
+      } catch (error) {
+        this.logger.warn(
+          `Cross-encoder rerank failed, keeping semantic order: ${(error as Error).message}`
+        );
+      }
+    }
+
+    const paginatedItems = semanticProductIds
+      ? rerankedItems.slice((page - 1) * limit, page * limit)
+      : rerankedItems;
 
     return {
       ok: true,
       data: {
-        items: orderedItems,
+        items: paginatedItems,
         meta: {
           total,
           page,
@@ -310,5 +358,58 @@ export class SearchProductsHandler {
         latencyMs: Date.now() - startedAt
       }
     };
+  }
+
+  private async rerankProducts<T extends RerankCandidateProduct>(
+    query: string,
+    products: T[]
+  ): Promise<T[]> {
+    const candidateTexts = products.map((product) =>
+      this.buildRerankText(product)
+    );
+    const scores = await this.embeddingService.rerank(query, candidateTexts);
+
+    return products
+      .map((product, index) => ({
+        product,
+        score: scores[index] ?? 0
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map(({ product }) => product);
+  }
+
+  private buildRerankText(product: RerankCandidateProduct): string {
+    const variantSizes = new Set<string>();
+    const variantColors = new Set<string>();
+
+    for (const variant of product.variants ?? []) {
+      if (variant.sizeOptionValue?.value) {
+        variantSizes.add(variant.sizeOptionValue.value);
+      }
+
+      if (variant.colorOptionValue?.value) {
+        variantColors.add(variant.colorOptionValue.value);
+      }
+    }
+
+    const parts = [
+      product.name,
+      product.brand,
+      product.category?.name,
+      product.shortDescription,
+      product.descriptionHtml,
+      product.material,
+      product.season,
+      product.fit,
+      product.gender,
+      variantSizes.size > 0
+        ? `sizes: ${Array.from(variantSizes).join(', ')}`
+        : null,
+      variantColors.size > 0
+        ? `colors: ${Array.from(variantColors).join(', ')}`
+        : null
+    ].filter((part): part is string => Boolean(part && part.trim()));
+
+    return parts.join(' | ');
   }
 }
