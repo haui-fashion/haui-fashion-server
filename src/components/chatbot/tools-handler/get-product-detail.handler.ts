@@ -88,15 +88,6 @@ export class GetProductDetailHandler {
             orderBy: { createdAt: 'desc' }
           }
         }),
-        images: {
-          include: {
-            file: {
-              select: { id: true, url: true }
-            }
-          },
-          take: 10,
-          orderBy: [{ isPrimary: 'desc' }, { position: 'asc' }]
-        },
         ...(includeReviews && {
           reviews: {
             select: {
@@ -128,9 +119,28 @@ export class GetProductDetailHandler {
       };
     }
 
+    const transformed = {
+      id: product.id,
+      name: product.name,
+      brand: product.brand ?? null,
+      shortDescription: product.shortDescription ?? null,
+      material: product.material ?? null,
+      season: product.season ?? null,
+      fit: product.fit ?? null,
+      gender: product.gender ?? null,
+      category: product.category?.name ?? null,
+      variants: (product.variants ?? []).map((v) => ({
+        size: (v as any).sizeOptionValue?.value ?? null,
+        price: v.price ?? null,
+        stock: v.stock ?? null,
+        color: (v as any).colorOptionValue?.value ?? null
+      })),
+      ...(includeReviews && { reviews: product.reviews ?? [] })
+    };
+
     return {
       ok: true,
-      data: product,
+      data: transformed,
       error: null,
       meta: {
         source: 'prisma.product',

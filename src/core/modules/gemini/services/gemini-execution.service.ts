@@ -23,6 +23,14 @@ export class GeminiExecutionService {
     workload: GeminiWorkload;
     operation: GeminiOperation<T>;
   }): Promise<T> {
+    if (this.geminiKeyPoolService.isUltimateOnlyEnabled()) {
+      return this.executeWithUltimateKey(
+        params.workload,
+        params.operation,
+        true
+      );
+    }
+
     if (params.workload === GEMINI_WORKLOAD.image) {
       return this.executeWithUltimateKey(params.workload, params.operation);
     }
@@ -129,10 +137,22 @@ export class GeminiExecutionService {
 
   private async executeWithUltimateKey<T>(
     workload: GeminiWorkload,
-    operation: GeminiOperation<T>
+    operation: GeminiOperation<T>,
+    skipRedisBlocking = false
   ): Promise<T> {
     const ultimateKey = this.geminiKeyPoolService.getUltimateKey();
-    if (await this.geminiKeyPoolService.isBlocked(ultimateKey)) {
+    if (!ultimateKey) {
+      throw this.createExhaustedError(
+        workload,
+        null,
+        'Missing Gemini ultimate API key'
+      );
+    }
+
+    if (
+      !skipRedisBlocking &&
+      (await this.geminiKeyPoolService.isBlocked(ultimateKey))
+    ) {
       throw this.createExhaustedError(
         workload,
         null,
@@ -149,11 +169,15 @@ export class GeminiExecutionService {
         throw error;
       }
 
-      await this.geminiKeyPoolService.blockForRateLimit(ultimateKey);
+      if (!skipRedisBlocking) {
+        await this.geminiKeyPoolService.blockForRateLimit(ultimateKey);
+      }
       throw this.createExhaustedError(
         workload,
         error,
-        'Ultimate key is rate-limited'
+        skipRedisBlocking
+          ? 'Ultimate-only mode key is rate-limited'
+          : 'Ultimate key is rate-limited'
       );
     }
   }

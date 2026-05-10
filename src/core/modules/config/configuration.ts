@@ -11,10 +11,20 @@ const parseGeminiKeys = (rawValue?: string): string[] => {
   return [...new Set(normalized)];
 };
 
+const parseBoolean = (rawValue?: string): boolean => {
+  if (!rawValue) {
+    return false;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+};
+
 export default () => {
   const configuredGeminiKeys = parseGeminiKeys(process.env.GEMINI_API_KEYS);
   const legacyGeminiKeys = parseGeminiKeys(process.env.GEMINI_API_KEY);
   const ultimateGeminiKey = (process.env.GEMINI_ULTIMATE_API_KEY || '').trim();
+  const ultimateOnlyGeminiKey = parseBoolean(process.env.GEMINI_ULTIMATE_ONLY);
   const regularGeminiKeys = (
     configuredGeminiKeys.length > 0 ? configuredGeminiKeys : legacyGeminiKeys
   ).filter((key) => key !== ultimateGeminiKey);
@@ -65,6 +75,7 @@ export default () => {
       apiKey: primaryGeminiKey,
       apiKeys: regularGeminiKeys,
       ultimateApiKey: ultimateGeminiKey,
+      ultimateOnly: ultimateOnlyGeminiKey,
       models: {
         chat: process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash',
         image: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',

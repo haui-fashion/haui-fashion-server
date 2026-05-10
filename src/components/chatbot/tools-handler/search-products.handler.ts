@@ -283,25 +283,6 @@ export class SearchProductsHandler {
             orderBy: {
               createdAt: 'desc'
             }
-          },
-          images: {
-            include: {
-              file: {
-                select: {
-                  id: true,
-                  url: true
-                }
-              }
-            },
-            take: 3,
-            orderBy: [
-              {
-                isPrimary: 'desc'
-              },
-              {
-                position: 'asc'
-              }
-            ]
           }
         }
       }),
@@ -340,10 +321,30 @@ export class SearchProductsHandler {
       ? rerankedItems.slice((page - 1) * limit, page * limit)
       : rerankedItems;
 
+    const transformedItems = paginatedItems.map((p) => ({
+      id: p.id,
+      name: p.name,
+      brand: p.brand ?? null,
+      shortDescription: p.shortDescription ?? null,
+      material: p.material ?? null,
+      season: p.season ?? null,
+      fit: p.fit ?? null,
+      gender: p.gender ?? null,
+      category: p.category?.name ?? null,
+      variants: (p.variants ?? []).map((v) => ({
+        size: (v as any).sizeOptionValue?.value ?? null,
+        price: v.price ?? null,
+        stock: v.stock ?? null,
+        color: (v as any).colorOptionValue?.value ?? null
+      }))
+    }));
+
+    const geminiItems = transformedItems.slice(0, 10);
+
     return {
       ok: true,
       data: {
-        items: paginatedItems,
+        items: geminiItems,
         meta: {
           total,
           page,
@@ -383,12 +384,13 @@ export class SearchProductsHandler {
     const variantColors = new Set<string>();
 
     for (const variant of product.variants ?? []) {
-      if (variant.sizeOptionValue?.value) {
-        variantSizes.add(variant.sizeOptionValue.value);
+      const vv = variant as any;
+      if (vv.sizeOptionValue?.value) {
+        variantSizes.add(vv.sizeOptionValue.value);
       }
 
-      if (variant.colorOptionValue?.value) {
-        variantColors.add(variant.colorOptionValue.value);
+      if (vv.colorOptionValue?.value) {
+        variantColors.add(vv.colorOptionValue.value);
       }
     }
 

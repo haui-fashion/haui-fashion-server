@@ -16,12 +16,15 @@ export class GeminiKeyPoolService {
   private readonly logger = new Logger(GeminiKeyPoolService.name);
   private readonly regularKeys: string[];
   private readonly ultimateKey: string;
+  private readonly ultimateOnly: boolean;
   private roundRobinCursor = 0;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly appCacheService: AppCacheService
   ) {
+    this.ultimateOnly =
+      this.configService.get<boolean>('gemini.ultimateOnly') || false;
     this.ultimateKey =
       this.configService.get<string>('gemini.ultimateApiKey') || '';
     this.regularKeys = this.readRegularKeys();
@@ -35,7 +38,13 @@ export class GeminiKeyPoolService {
     return this.ultimateKey;
   }
 
+  isUltimateOnlyEnabled(): boolean {
+    return this.ultimateOnly;
+  }
+
   async getOrderedRegularKeys(workload: GeminiWorkload): Promise<string[]> {
+    if (this.ultimateOnly) return [];
+
     if (workload === GEMINI_WORKLOAD.image) return [];
 
     const candidates = this.rotateRegularKeys();
@@ -93,6 +102,13 @@ export class GeminiKeyPoolService {
   }
 
   private readRegularKeys(): string[] {
+    if (this.ultimateOnly) {
+      this.logger.log(
+        'Gemini ultimate-only mode enabled; regular key pool is disabled.'
+      );
+      return [];
+    }
+
     const configuredKeys =
       this.configService.get<string[]>('gemini.apiKeys') || [];
     const normalizedKeys = [

@@ -336,13 +336,13 @@ export class ChatbotConversationService {
       conversation.id
     );
 
+    const recentUserHistory = history
+      .filter((turn) => turn.role === 'user')
+      .slice(-this.memoryWindowSize);
+
     const intent = await this.ollamaIntentRouterService.routeIntent(
-      `History: ${history
-        .slice(-this.memoryWindowSize)
-        .map(
-          (turn) =>
-            `${turn.role === 'user' ? 'User' : 'Assistant'}: ${turn.content}`
-        )
+      `History: ${recentUserHistory
+        .map((turn) => `User: ${turn.content}`)
         .join('\n')}\nCurrent message: ${normalizedMessage}`
     );
 
@@ -358,7 +358,7 @@ export class ChatbotConversationService {
       }
     });
 
-    const productCards = this.extractProductCards(
+    const productCards = await this.extractProductCards(
       assistantResult.toolCalls,
       assistantResult.recommendedProductIds
     );
@@ -815,10 +815,10 @@ export class ChatbotConversationService {
     return chunks;
   }
 
-  private extractProductCards(
+  private async extractProductCards(
     toolCalls: ToolInvocationLog[],
     recommendedProductIds: string[]
-  ): ProductCardPayload[] {
+  ): Promise<ProductCardPayload[]> {
     const cards = new Map<string, ProductCardPayload>();
 
     for (const toolCall of toolCalls) {
@@ -839,14 +839,14 @@ export class ChatbotConversationService {
             continue;
           }
 
-          const card = this.toProductCard(product);
+          const card = await this.toProductCard(product);
           const cardKey = card.id || card.slug || randomUUID();
           cards.set(cardKey, card);
         }
       }
 
       if (name === 'get_product_detail') {
-        const card = this.toProductCard(data);
+        const card = await this.toProductCard(data);
         const cardKey = card.id || card.slug || randomUUID();
         cards.set(cardKey, card);
       }
@@ -961,21 +961,52 @@ export class ChatbotConversationService {
     return parsed?.orderPayload;
   }
 
-  private toProductCard(product: Record<string, unknown>): ProductCardPayload {
-    const images = Array.isArray(product.images) ? product.images : [];
-    const firstImage = images.length > 0 ? this.asRecord(images[0]) : null;
-    const file = this.asRecord(firstImage?.file);
-
+  private async toProductCard(
+    product: Record<string, unknown>
+  ): Promise<ProductCardPayload> {
     const variants = Array.isArray(product.variants) ? product.variants : [];
     const resolvedPrice = this.resolveProductPrice(product, variants);
+    const { imageUrl, slug } = await this.resolveProductInformation(product.id);
 
     return {
       id: this.asString(product.id),
       name: this.asString(product.name),
-      slug: this.asString(product.slug),
+      slug,
       brand: this.asString(product.brand),
       price: resolvedPrice,
-      imageUrl: this.asString(file?.url)
+      imageUrl
+    };
+  }
+
+  private async resolveProductInformation(
+    productId: unknown
+  ): Promise<{ imageUrl: string | undefined; slug: string | undefined }> {
+    const id = this.asString(productId);
+    if (!id) {
+      return { imageUrl: undefined, slug: undefined };
+    }
+
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      select: {
+        images: {
+          include: {
+            file: {
+              select: { url: true }
+            }
+          },
+          take: 1,
+          orderBy: [{ isPrimary: 'desc' }, { position: 'asc' }]
+        },
+        slug: true
+      }
+    });
+
+    const firstImage = product?.images?.[0];
+    const file = firstImage ? (firstImage as any).file : null;
+    return {
+      imageUrl: this.asString(file?.url),
+      slug: this.asString(product?.slug)
     };
   }
 
