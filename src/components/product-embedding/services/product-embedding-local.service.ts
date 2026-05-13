@@ -268,6 +268,7 @@ export class ProductEmbeddingLocalService {
       brand: product.brand || 'Không xác định',
       isActive: product.isActive,
       shortDescription: shortDescription || fallbackDescription,
+      longDescription: fallbackDescription,
       semanticContext: this.buildSemanticContext({
         categoryName: product.category?.name,
         gender: product.gender,
@@ -293,7 +294,12 @@ export class ProductEmbeddingLocalService {
       ? payload.styleTags.join(', ')
       : 'Không xác định';
 
-    return [
+    const detailDescription = this.truncateText(payload.longDescription, 700);
+    const hasDetailDescription =
+      detailDescription.length > 0 &&
+      detailDescription !== payload.shortDescription;
+
+    const parts = [
       `Sản phẩm: ${payload.name}`,
       `Danh mục: ${payload.categoryName}`,
       `Giới tính: ${payload.gender}`,
@@ -304,10 +310,31 @@ export class ProductEmbeddingLocalService {
       `Form: ${payload.fit}`,
       `Mùa: ${payload.season}`,
       `Thương hiệu: ${payload.brand}`,
-      `Mô tả ngắn: ${payload.shortDescription}`,
+      `Mô tả ngắn: ${payload.shortDescription}`
+    ];
+
+    if (hasDetailDescription) {
+      parts.push(`Mô tả chi tiết: ${detailDescription}`);
+    }
+
+    parts.push(
       `Ngữ cảnh ngữ nghĩa: ${payload.semanticContext}`,
       `Trạng thái: ${payload.isActive ? 'đang bán' : 'ngừng bán'}`
-    ].join('\n');
+    );
+
+    return parts.join('\n');
+  }
+
+  private truncateText(value: string, maxLength: number): string {
+    if (!value) {
+      return '';
+    }
+
+    if (value.length <= maxLength) {
+      return value.trim();
+    }
+
+    return value.slice(0, maxLength).trim();
   }
 
   private async persistSyncedEmbedding(input: LocalEmbeddingPersistInput) {

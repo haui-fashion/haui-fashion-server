@@ -75,8 +75,8 @@ export class EmbeddingService {
 
   async rerank(query: string, texts: string[]): Promise<number[]> {
     const response = await this.requestRerank('/rerank', {
-      query,
-      texts
+      query: this.normalizeRerankText(query),
+      texts: texts.map((text) => this.normalizeRerankText(text))
     });
 
     return response.scores;
@@ -157,5 +157,15 @@ export class EmbeddingService {
 
   private buildUrl(endpoint: '/query' | '/passage' | '/rerank'): string {
     return `${this.baseUrl.replace(/\/$/, '')}${endpoint}`;
+  }
+
+  private normalizeRerankText(value: string): string {
+    const normalized = value
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return normalized.length > 0 ? normalized : 'unknown';
   }
 }

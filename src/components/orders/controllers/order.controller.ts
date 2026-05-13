@@ -80,7 +80,7 @@ export class OrderController {
   @ApiOperation({
     summary: 'VNPay return URL handler (no auth required)'
   })
-  vnpayReturn(@Query() query: Record<string, string>) {
+  async vnpayReturn(@Query() query: Record<string, string>) {
     return this.orderService.handleVnpayReturn(query);
   }
 

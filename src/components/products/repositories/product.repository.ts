@@ -53,6 +53,40 @@ type RankedProductItem = {
   score: number;
 };
 
+type RerankCandidateProduct = Prisma.ProductGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    brand: true;
+    shortDescription: true;
+    descriptionHtml: true;
+    material: true;
+    season: true;
+    fit: true;
+    styleTags: true;
+    gender: true;
+    category: {
+      select: {
+        name: true;
+      };
+    };
+    variants: {
+      select: {
+        sizeOptionValue: {
+          select: {
+            value: true;
+          };
+        };
+        colorOptionValue: {
+          select: {
+            value: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
 type CategoryTreeIdRow = {
   id: string;
 };
@@ -69,6 +103,14 @@ const MAX_VECTOR_SEARCH_CANDIDATES = 3000;
 const DEFAULT_VECTOR_SEMANTIC_WEIGHT = 0.75;
 const DEFAULT_VECTOR_LEXICAL_WEIGHT = 0.25;
 const DEFAULT_VECTOR_MIN_SEMANTIC_SCORE = 0.2;
+const DEFAULT_VECTOR_RERANK_CANDIDATE_LIMIT = 30;
+const DEFAULT_VECTOR_RERANK_WEIGHT = 0.55;
+const DEFAULT_VECTOR_HYBRID_WEIGHT = 0.45;
+const DEFAULT_VECTOR_DYNAMIC_THRESHOLD_MIN_SCORE = 0.35;
+const DEFAULT_VECTOR_DYNAMIC_THRESHOLD_TOP_RATIO = 0.72;
+const DEFAULT_VECTOR_DYNAMIC_THRESHOLD_MAX_DROP = 0.28;
+const DEFAULT_VECTOR_DYNAMIC_THRESHOLD_MIN_RESULTS = 0;
+const DEFAULT_VECTOR_RERANK_TEXT_MAX_LENGTH = 700;
 
 const productInclude = {
   category: true,
@@ -196,6 +238,14 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
   private readonly vectorSemanticWeight: number;
   private readonly vectorLexicalWeight: number;
   private readonly vectorMinSemanticScore: number;
+  private readonly vectorRerankCandidateLimit: number;
+  private readonly vectorRerankWeight: number;
+  private readonly vectorHybridWeight: number;
+  private readonly vectorDynamicThresholdMinScore: number;
+  private readonly vectorDynamicThresholdTopRatio: number;
+  private readonly vectorDynamicThresholdMaxDrop: number;
+  private readonly vectorDynamicThresholdMinResults: number;
+  private readonly vectorRerankTextMaxLength: number;
 
   constructor(
     private readonly datasource: ProductDatasource,
@@ -228,6 +278,78 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
       ),
       -1,
       1
+    );
+
+    this.vectorRerankCandidateLimit = Math.min(
+      Math.max(
+        this.configService.get<number>(
+          'embedding.search.rerankCandidateLimit',
+          DEFAULT_VECTOR_RERANK_CANDIDATE_LIMIT
+        ),
+        20
+      ),
+      MAX_VECTOR_SEARCH_CANDIDATES
+    );
+
+    this.vectorRerankWeight = this.clamp(
+      this.configService.get<number>(
+        'embedding.search.rerankWeight',
+        DEFAULT_VECTOR_RERANK_WEIGHT
+      ),
+      0,
+      1
+    );
+
+    this.vectorHybridWeight = this.clamp(
+      this.configService.get<number>(
+        'embedding.search.hybridWeight',
+        DEFAULT_VECTOR_HYBRID_WEIGHT
+      ),
+      0,
+      1
+    );
+
+    this.vectorDynamicThresholdMinScore = this.clamp(
+      this.configService.get<number>(
+        'embedding.search.dynamicThreshold.minScore',
+        DEFAULT_VECTOR_DYNAMIC_THRESHOLD_MIN_SCORE
+      ),
+      0,
+      1
+    );
+
+    this.vectorDynamicThresholdTopRatio = this.clamp(
+      this.configService.get<number>(
+        'embedding.search.dynamicThreshold.topRatio',
+        DEFAULT_VECTOR_DYNAMIC_THRESHOLD_TOP_RATIO
+      ),
+      0,
+      1
+    );
+
+    this.vectorDynamicThresholdMaxDrop = this.clamp(
+      this.configService.get<number>(
+        'embedding.search.dynamicThreshold.maxDrop',
+        DEFAULT_VECTOR_DYNAMIC_THRESHOLD_MAX_DROP
+      ),
+      0,
+      1
+    );
+
+    this.vectorDynamicThresholdMinResults = Math.max(
+      this.configService.get<number>(
+        'embedding.search.dynamicThreshold.minResults',
+        DEFAULT_VECTOR_DYNAMIC_THRESHOLD_MIN_RESULTS
+      ),
+      1
+    );
+
+    this.vectorRerankTextMaxLength = Math.max(
+      this.configService.get<number>(
+        'embedding.search.rerankTextMaxLength',
+        DEFAULT_VECTOR_RERANK_TEXT_MAX_LENGTH
+      ),
+      200
     );
   }
 
@@ -454,33 +576,61 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
       lexicalScoreById.set(item.id, item.score);
     }
 
-    const ranked = new Map<string, RankedProductItem>();
+    const hybridScores = this.mergeHybridScores(
+      semanticScoreById,
+      lexicalScoreById
+    );
 
-    for (const [id, score] of Array.from(semanticScoreById.entries())) {
-      ranked.set(id, {
-        id,
-        score:
-          score * this.vectorSemanticWeight +
-          (lexicalScoreById.get(id) ?? 0) * this.vectorLexicalWeight
-      });
+    const hybridRanked = Array.from(hybridScores.entries())
+      .map(([id, score]) => ({ id, score }))
+      .sort((a, b) => b.score - a.score);
+
+    if (hybridRanked.length === 0) {
+      return {
+        items: [],
+        meta: {
+          total: 0,
+          page,
+          limit,
+          totalPages: 0
+        }
+      };
     }
 
-    for (const [id, score] of Array.from(lexicalScoreById.entries())) {
-      if (ranked.has(id)) {
-        continue;
-      }
-
-      ranked.set(id, {
-        id,
-        score:
-          (semanticScoreById.get(id) ?? 0) * this.vectorSemanticWeight +
-          score * this.vectorLexicalWeight
-      });
-    }
-
-    const mergedIds = Array.from(ranked.values())
-      .sort((a, b) => b.score - a.score)
+    const rerankCandidateIds = hybridRanked
+      .slice(0, this.vectorRerankCandidateLimit)
       .map((item) => item.id);
+
+    let finalScores = new Map<string, number>(hybridScores);
+
+    if (rerankCandidateIds.length > 1) {
+      try {
+        const rerankScores = await this.rerankCandidates(
+          search,
+          rerankCandidateIds
+        );
+        finalScores = this.combineHybridAndRerankScores(
+          hybridScores,
+          rerankScores
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Cross-encoder rerank is unavailable for this request: ${message}`
+        );
+      }
+    }
+
+    const rankedAfterRerank = Array.from(finalScores.entries())
+      .map(([id, score]) => ({ id, score }))
+      .sort((a, b) => b.score - a.score);
+
+    const filteredIds = this.applyDynamicThreshold(rankedAfterRerank);
+    const mergedIds =
+      filteredIds.length > 0
+        ? filteredIds
+        : rankedAfterRerank.map((item) => item.id);
 
     const total = mergedIds.length;
     const pageIds = mergedIds.slice(skip, skip + limit);
@@ -523,6 +673,245 @@ export class ProductRepository extends BaseRepository<ProductEntity, Product> {
         totalPages: Math.ceil(total / limit)
       }
     };
+  }
+
+  private mergeHybridScores(
+    semanticScoreById: Map<string, number>,
+    lexicalScoreById: Map<string, number>
+  ): Map<string, number> {
+    const semanticNormalized = this.normalizeScoreMap(semanticScoreById);
+    const lexicalNormalized = this.normalizeScoreMap(lexicalScoreById);
+    const ranked = new Map<string, number>();
+
+    for (const id of new Set([
+      ...semanticNormalized.keys(),
+      ...lexicalNormalized.keys()
+    ])) {
+      const semantic = semanticNormalized.get(id) ?? 0;
+      const lexical = lexicalNormalized.get(id) ?? 0;
+      const score =
+        semantic * this.vectorSemanticWeight +
+        lexical * this.vectorLexicalWeight;
+
+      ranked.set(id, this.clamp(score, 0, 1));
+    }
+
+    return ranked;
+  }
+
+  private async rerankCandidates(
+    search: string,
+    candidateIds: string[]
+  ): Promise<Map<string, number>> {
+    const candidates = await this.prisma.product.findMany({
+      where: {
+        id: {
+          in: candidateIds
+        }
+      },
+      select: {
+        id: true,
+        styleTags: true,
+        name: true,
+        brand: true,
+        shortDescription: true,
+        descriptionHtml: true,
+        material: true,
+        season: true,
+        fit: true,
+        gender: true,
+        category: {
+          select: {
+            name: true
+          }
+        },
+        variants: {
+          select: {
+            sizeOptionValue: {
+              select: {
+                value: true
+              }
+            },
+            colorOptionValue: {
+              select: {
+                value: true
+              }
+            }
+          },
+          take: 16,
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    });
+
+    const candidateById = new Map(
+      candidates.map((candidate) => [candidate.id, candidate])
+    );
+
+    const orderedCandidates = candidateIds
+      .map((id) => candidateById.get(id))
+      .filter(
+        (item): item is RerankCandidateProduct =>
+          item !== undefined && item !== null
+      );
+
+    if (orderedCandidates.length === 0) {
+      return new Map();
+    }
+
+    const rerankTexts = orderedCandidates.map((candidate) =>
+      this.buildRerankText(candidate)
+    );
+    const rawScores = await this.embeddingService.rerank(search, rerankTexts);
+
+    const sigmoidScores = rawScores.map((score) => this.sigmoid(score));
+    const normalizedScores = this.normalizeScores(sigmoidScores);
+    const rerankScoreById = new Map<string, number>();
+
+    orderedCandidates.forEach((candidate, index) => {
+      rerankScoreById.set(candidate.id, normalizedScores[index] ?? 0);
+    });
+
+    return rerankScoreById;
+  }
+
+  private combineHybridAndRerankScores(
+    hybridScores: Map<string, number>,
+    rerankScores: Map<string, number>
+  ): Map<string, number> {
+    if (rerankScores.size === 0) {
+      return hybridScores;
+    }
+
+    const merged = new Map<string, number>();
+
+    for (const [id, hybridScore] of Array.from(hybridScores.entries())) {
+      const rerankScore = rerankScores.get(id);
+
+      if (rerankScore == null) {
+        merged.set(id, hybridScore);
+        continue;
+      }
+
+      const finalScore =
+        hybridScore * this.vectorHybridWeight +
+        rerankScore * this.vectorRerankWeight;
+
+      merged.set(id, this.clamp(finalScore, 0, 1));
+    }
+
+    return merged;
+  }
+
+  private applyDynamicThreshold(rankedItems: RankedProductItem[]): string[] {
+    if (rankedItems.length === 0) {
+      return [];
+    }
+
+    const topScore = rankedItems[0].score;
+
+    const dynamicThreshold = Math.max(
+      this.vectorDynamicThresholdMinScore,
+      topScore * this.vectorDynamicThresholdTopRatio,
+      topScore - this.vectorDynamicThresholdMaxDrop
+    );
+
+    const filtered = rankedItems.filter(
+      (item) => item.score >= dynamicThreshold
+    );
+
+    const minResults = Math.min(
+      this.vectorDynamicThresholdMinResults,
+      rankedItems.length
+    );
+
+    if (filtered.length >= minResults) {
+      return filtered.map((item) => item.id);
+    }
+
+    return rankedItems.slice(0, minResults).map((item) => item.id);
+  }
+
+  private buildRerankText(product: RerankCandidateProduct): string {
+    const sizes = new Set<string>();
+    const colors = new Set<string>();
+
+    for (const variant of product.variants ?? []) {
+      if (variant.sizeOptionValue?.value) {
+        sizes.add(variant.sizeOptionValue.value);
+      }
+
+      if (variant.colorOptionValue?.value) {
+        colors.add(variant.colorOptionValue.value);
+      }
+    }
+
+    const styleTags: string[] = (product.styleTags as string[]) || [];
+
+    const parts = [
+      product.name,
+      product.brand,
+      product.category?.name,
+      product.shortDescription,
+      product.material,
+      product.season,
+      product.fit,
+      product.gender,
+      product.season,
+      styleTags.length > 0 ? `style tags: ${styleTags.join(', ')}` : null,
+      sizes.size > 0 ? `sizes: ${Array.from(sizes).join(', ')}` : null,
+      colors.size > 0 ? `colors: ${Array.from(colors).join(', ')}` : null
+    ].filter((part): part is string => Boolean(part && part.trim()));
+
+    return parts.join(' | ').slice(0, this.vectorRerankTextMaxLength);
+  }
+
+  private normalizeScoreMap(
+    scoreById: Map<string, number>
+  ): Map<string, number> {
+    const normalized = new Map<string, number>();
+    const values = Array.from(scoreById.values());
+
+    if (values.length === 0) {
+      return normalized;
+    }
+
+    const normalizedValues = this.normalizeScores(values);
+    let idx = 0;
+
+    for (const [id] of Array.from(scoreById.entries())) {
+      normalized.set(id, normalizedValues[idx] ?? 0);
+      idx += 1;
+    }
+
+    return normalized;
+  }
+
+  private normalizeScores(scores: number[]): number[] {
+    if (scores.length === 0) {
+      return [];
+    }
+
+    const min = Math.min(...scores);
+    const max = Math.max(...scores);
+
+    if (max - min < Number.EPSILON) {
+      return scores.map(() => 1);
+    }
+
+    return scores.map((score) => this.clamp((score - min) / (max - min), 0, 1));
+  }
+
+  private sigmoid(value: number): number {
+    if (value >= 0) {
+      const exp = Math.exp(-value);
+      return 1 / (1 + exp);
+    }
+
+    const exp = Math.exp(value);
+    return exp / (1 + exp);
   }
 
   private buildLexicalSearchCondition(

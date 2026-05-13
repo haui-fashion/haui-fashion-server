@@ -453,7 +453,7 @@ export class OrderService {
    * Handle VNPay ReturnURL callback.
    * Verifies the signature and returns payment result info for the frontend.
    */
-  handleVnpayReturn(query: Record<string, string>) {
+  async handleVnpayReturn(query: Record<string, string>) {
     const { isValid, vnpParams } = this.vnpayService.verifySecureHash(query);
 
     if (!isValid) {
@@ -465,6 +465,15 @@ export class OrderService {
 
     const responseCode = vnpParams['vnp_ResponseCode'];
     const isSuccess = responseCode === '00';
+    const txnRef = vnpParams['vnp_TxnRef'];
+    let orderId: string | undefined;
+
+    if (isSuccess) {
+      const payment = await this.prisma.payment.findUnique({
+        where: { code: txnRef }
+      });
+      orderId = payment?.orderId;
+    }
 
     return {
       success: isSuccess,
@@ -472,7 +481,8 @@ export class OrderService {
         ? 'Giao dịch thành công'
         : `Giao dịch không thành công. Mã lỗi: ${responseCode}`,
       data: {
-        txnRef: vnpParams['vnp_TxnRef'],
+        txnRef,
+        orderId,
         amount: Number(vnpParams['vnp_Amount']) / 100,
         orderInfo: vnpParams['vnp_OrderInfo'],
         transactionNo: vnpParams['vnp_TransactionNo'],
@@ -590,7 +600,7 @@ export class OrderService {
 
       const handled = await this.prisma.$transaction(async (tx) => {
         if (isSuccess) {
-          return this.markOrderPaidFromPending(
+          const paid = await this.markOrderPaidFromPending(
             tx,
             payment.id,
             payment.orderId,
@@ -598,6 +608,12 @@ export class OrderService {
               providerTransactionId
             }
           );
+
+          if (paid) {
+            await this.autoTransitionPaidOrderToDelivery(tx, payment.orderId);
+          }
+
+          return paid;
         }
 
         return this.failOrderAndRestoreStock(tx, payment.orderId, {

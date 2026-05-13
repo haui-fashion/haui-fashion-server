@@ -11,5 +11,6 @@ export class LocalEmbeddingPromptPayload {
   brand: string;
   isActive: boolean;
   shortDescription: string;
+  longDescription: string;
   semanticContext: string;
 }

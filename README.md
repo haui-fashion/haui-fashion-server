@@ -1,10 +1,10 @@
-# HAUi Fashion Server
+# HaUI Fashion Server
 
-NestJS backend for the HAUi Fashion ecommerce platform.
+NestJS backend for the HaUI Fashion ecommerce platform.
 
 ## Project Overview
 
-This service is the central application backend for the HAUi Fashion ecosystem.
+This service is the central application backend for the HaUI Fashion ecosystem.
 It exposes business APIs for the web client, orchestrates data persistence,
 and coordinates AI-related services (embedding + LLM) used by chatbot and search features.
 
@@ -121,7 +121,7 @@ make down-local
 
 ```mermaid
 flowchart LR
-  client[HAUi Client\nNext.js] -->|REST API + Socket.IO| server[HAUi Server\nNestJS]
+  client[HaUI Client\nNext.js] -->|REST API + Socket.IO| server[HaUI Server\nNestJS]
   admin[Admin UI] -->|REST API| server
 
   server -->|Prisma queries| postgres[(PostgreSQL + pgvector)]

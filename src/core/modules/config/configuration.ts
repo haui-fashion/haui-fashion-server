@@ -108,14 +108,47 @@ export default () => {
       ),
       search: {
         semanticWeight: parseFloat(
-          process.env.PRODUCT_SEARCH_VECTOR_SEMANTIC_WEIGHT || '0.75'
+          process.env.PRODUCT_SEARCH_VECTOR_SEMANTIC_WEIGHT || '0.55'
         ),
         lexicalWeight: parseFloat(
-          process.env.PRODUCT_SEARCH_VECTOR_LEXICAL_WEIGHT || '0.25'
+          process.env.PRODUCT_SEARCH_VECTOR_LEXICAL_WEIGHT || '0.45'
         ),
         minSemanticScore: parseFloat(
-          process.env.PRODUCT_SEARCH_VECTOR_MIN_SEMANTIC_SCORE || '0.2'
-        )
+          process.env.PRODUCT_SEARCH_VECTOR_MIN_SEMANTIC_SCORE || '0.7'
+        ),
+        rerankCandidateLimit: parseInt(
+          process.env.PRODUCT_SEARCH_VECTOR_RERANK_CANDIDATE_LIMIT || '30',
+          10
+        ),
+        rerankWeight: parseFloat(
+          process.env.PRODUCT_SEARCH_VECTOR_RERANK_WEIGHT || '0.7'
+        ),
+        hybridWeight: parseFloat(
+          process.env.PRODUCT_SEARCH_VECTOR_HYBRID_WEIGHT || '0.3'
+        ),
+        rerankTextMaxLength: parseInt(
+          process.env.PRODUCT_SEARCH_VECTOR_RERANK_TEXT_MAX_LENGTH || '512',
+          10
+        ),
+        dynamicThreshold: {
+          minScore: parseFloat(
+            process.env.PRODUCT_SEARCH_VECTOR_DYNAMIC_THRESHOLD_MIN_SCORE ||
+              '0.7'
+          ),
+          topRatio: parseFloat(
+            process.env.PRODUCT_SEARCH_VECTOR_DYNAMIC_THRESHOLD_TOP_RATIO ||
+              '0.72'
+          ),
+          maxDrop: parseFloat(
+            process.env.PRODUCT_SEARCH_VECTOR_DYNAMIC_THRESHOLD_MAX_DROP ||
+              '0.18'
+          ),
+          minResults: parseInt(
+            process.env.PRODUCT_SEARCH_VECTOR_DYNAMIC_THRESHOLD_MIN_RESULTS ||
+              '3',
+            10
+          )
+        }
       }
     },
     httpClient: {
